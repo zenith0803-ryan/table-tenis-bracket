@@ -11,10 +11,14 @@ CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # O, I, 0, 1 제외
 
 
 def generate_code():
-    while True:
-        code = ''.join(random.choices(CHARS, k=6))
-        if code not in rooms:
-            return code
+    # 형식: YYYYMMDDHHMM_ABC (예: 202502261430_7K3)
+    now_str = datetime.now().strftime('%Y%m%d%H%M')
+    suffix = ''.join(random.choices(CHARS, k=3))
+    code = f'{now_str}_{suffix}'
+    while code in rooms:
+        suffix = ''.join(random.choices(CHARS, k=3))
+        code = f'{now_str}_{suffix}'
+    return code
 
 
 def now_iso():
@@ -36,6 +40,19 @@ def create_room():
         'updated': now,
     }
     return jsonify({'code': code}), 201
+
+
+@app.get('/api/rooms')
+def list_rooms():
+    sorted_rooms = sorted(rooms.items(), key=lambda x: x[1]['created'], reverse=True)
+    result = []
+    for code, data in sorted_rooms[:20]:
+        result.append({
+            'code': code,
+            'created': data['created'],
+            'playerCount': len(data.get('state', {}).get('players', [])),
+        })
+    return jsonify(result)
 
 
 @app.get('/api/rooms/<code>')

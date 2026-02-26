@@ -282,7 +282,7 @@ function buildStats(items, matches) {
   items.forEach(p => { stats[p.name] = { name: p.name, buso: p.buso || null, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
 
   matches
-    .filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles'))
+    .filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles' || m.phase === 'tournament'))
     .forEach(m => {
       if (!stats[m.player1] || !stats[m.player2]) return;
       const win = m.winner, lose = win === m.player1 ? m.player2 : m.player1;
@@ -331,37 +331,57 @@ function render() {
 // ================================================================
 // SETUP SCREEN
 // ================================================================
-function renderSetupHome(onNew) {
+async function renderSetupHome(onNew) {
   app.innerHTML = '';
-  const codeInput = h('input', { type: 'text', placeholder: '방 코드 입력 (예: ABF3K7)', style: 'text-transform:uppercase;letter-spacing:2px' });
-
   app.appendChild(d('header', h('h1', {}, '🏓 탁구 대진표')));
-  app.appendChild(d('content',
-    d('hero',
-      d('hero-icon', '🏓'),
-      d('hero-title', '탁구 대진표'),
-      d('hero-sub', '친구들과 함께하는 탁구 대회'),
-    ),
-    h('button', { cls: 'btn btn-primary', onclick: onNew }, '새 대회 만들기'),
-    d('or-row', '또는 방 코드로 참가'),
-    d('join-row',
-      codeInput,
-      h('button', {
-        cls: 'btn btn-secondary btn-sm',
-        onclick: async () => {
-          const code = codeInput.value.trim().toUpperCase();
-          if (code.length !== 6) { alert('6자리 방 코드를 입력하세요'); return; }
-          const room = await apiGet(code);
-          if (!room) { alert('방을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.'); return; }
-          roomCode = code;
-          Object.assign(S, room.state);
-          history.replaceState(null, '', `?room=${code}`);
-          startPolling();
-          render();
-        }
-      }, '참가'),
-    ),
+
+  const content = d('content');
+  content.appendChild(d('hero',
+    d('hero-icon', '🏓'),
+    d('hero-title', '탁구 대진표'),
+    d('hero-sub', '친구들과 함께하는 탁구 대회'),
   ));
+  content.appendChild(h('button', { cls: 'btn btn-primary', onclick: onNew }, '새 대회 만들기'));
+  content.appendChild(h('hr', { cls: 'divider' }));
+
+  const listTitle = d('dash-section-title', '최근 개설된 방');
+  const listEl = h('div', {});
+  content.appendChild(listTitle);
+  content.appendChild(listEl);
+  app.appendChild(content);
+
+  const joinRoom = async (code) => {
+    const room = await apiGet(code);
+    if (!room) { alert('방을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.'); return; }
+    roomCode = code;
+    Object.assign(S, room.state);
+    history.replaceState(null, '', `?room=${code}`);
+    startPolling();
+    render();
+  };
+
+  try {
+    const res = await fetch('/api/rooms');
+    const roomList = await res.json();
+    if (roomList.length === 0) {
+      listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '개설된 방이 없습니다'));
+    } else {
+      roomList.forEach(room => {
+        const dt = new Date(room.created);
+        const timeStr = `${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+        const card = h('div', { cls: 'match-card' });
+        card.appendChild(d('match-players',
+          h('div', { cls: 'mp', style: 'font-family:monospace;font-size:13px;font-weight:600' }, room.code),
+          s('match-vs', `${room.playerCount}명`),
+          h('div', { cls: 'mp right', style: 'font-size:12px;color:#aaa;font-weight:400' }, timeStr),
+        ));
+        card.onclick = () => joinRoom(room.code);
+        listEl.appendChild(card);
+      });
+    }
+  } catch (_) {
+    listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '방 목록을 불러올 수 없습니다'));
+  }
 }
 
 function renderSetupNew(tmp, onBack) {
@@ -568,7 +588,7 @@ function renderMain() {
   ));
 
   // Tabs
-  const tabDefs = [['matches', '경기'], ['bracket', '대진표'], ['dashboard', '현황'], ['info', '정보']];
+  const tabDefs = [['matches', '경기'], ['bracket', '대진표'], ['dashboard', '종합 현황판'], ['info', '정보']];
   app.appendChild(d('tabs', ...tabDefs.map(([key, label]) => {
     const t = h('div', { cls: cx('tab', S.tab === key && 'active') }, label);
     t.onclick = () => { S.tab = key; renderMain(); };
@@ -661,7 +681,7 @@ function matchCard(m) {
 
   card.appendChild(d('match-players',
     h('div', { cls: cx('mp', m.winner === m.player1 && 'winner') }, m.player1),
-    s('match-vs', done ? `${m.score1}-${m.score2}` : 'vs'),
+    s('match-vs', done ? (m.score1 + m.score2 > 0 ? `${m.score1}-${m.score2}` : '완료') : 'vs'),
     h('div', { cls: cx('mp right', m.winner === m.player2 && 'winner') }, m.player2),
   ));
 
@@ -850,7 +870,7 @@ function renderInfoTab() {
     content.appendChild(h('div', {},
       h('label', {}, '방 코드'),
       d('room-code-big', roomCode),
-      h('p', { style: 'text-align:center;font-size:12px;color:#aaa;margin-bottom:16px' }, 'URL 또는 이 코드로 참가할 수 있습니다'),
+      h('p', { style: 'text-align:center;font-size:12px;color:#aaa;margin-bottom:16px' }, 'URL 공유 또는 홈 화면 방 목록에서 참가'),
     ));
   }
 
@@ -879,24 +899,22 @@ function renderInfoTab() {
 }
 
 // ================================================================
-// SCORE MODAL (빠른 승패 + 세트 상세 선택)
+// SCORE MODAL (승자 선택 → 세트 스코어 선택)
 // ================================================================
 function renderModal() {
   const match = S.matches.find(m => m.id === S.modalMatchId);
   if (!match) return null;
 
-  const maxSets = S.settings.scoringFormat === 'bo5' ? 5 : 3;
   const needed = winsNeeded();
-  let sets = match.sets.length > 0 ? match.sets.map(s => [...s]) : [['', '']];
-  let showDetail = match.sets.length > 0; // 이미 점수 있으면 상세 펼침
   const hc = calcHandicap(match);
+  // 이미 결과가 있으면 해당 승자를 초기 선택 상태로
+  let selectedWinner = match.winner || null;
 
   const overlay = d('overlay');
 
-  const saveWinner = (winner) => {
-    const isP1 = winner === match.player1;
+  const saveResult = (winner, score1, score2) => {
     const idx = S.matches.findIndex(m => m.id === S.modalMatchId);
-    S.matches[idx] = { ...match, sets: [], score1: isP1 ? needed : 0, score2: isP1 ? 0 : needed, winner };
+    S.matches[idx] = { ...match, sets: [], score1, score2, winner };
     if (match.phase === 'tournament') advanceTournament(S.matches);
     S.modalMatchId = null;
     if (roomCode) apiSave(roomCode, S);
@@ -915,77 +933,47 @@ function renderModal() {
       h('span', {}, match.player2),
     ));
 
-    // 핸디캡 표시
     if (hc) {
       modal.appendChild(d('modal-handicap', `🏸 핸디캡: ${hc.player} +${hc.pts}점`));
     }
 
-    // 빠른 승패 버튼
-    modal.appendChild(d('win-btns',
-      h('button', {
-        cls: 'win-btn p1',
-        onclick: () => saveWinner(match.player1),
-      }, `🏆 ${match.player1} 승`),
-      h('button', {
-        cls: 'win-btn p2',
-        onclick: () => saveWinner(match.player2),
-      }, `🏆 ${match.player2} 승`),
-    ));
+    if (!selectedWinner) {
+      // ── 1단계: 승자 선택 ──
+      modal.appendChild(h('p', { style: 'font-size:13px;color:#888;margin-bottom:10px;text-align:center' }, '승자를 선택하세요'));
+      modal.appendChild(d('win-btns',
+        h('button', { cls: 'win-btn p1', onclick: () => { selectedWinner = match.player1; draw(); } }, `🏆 ${match.player1} 승`),
+        h('button', { cls: 'win-btn p2', onclick: () => { selectedWinner = match.player2; draw(); } }, `🏆 ${match.player2} 승`),
+      ));
+    } else {
+      // ── 2단계: 세트 스코어 선택 ──
+      const isP1 = selectedWinner === match.player1;
+      modal.appendChild(h('div', { style: 'text-align:center;font-weight:700;color:#27ae60;margin-bottom:12px' }, `✅ ${selectedWinner} 승`));
+      modal.appendChild(h('p', { style: 'font-size:13px;color:#888;margin-bottom:10px;text-align:center' }, '세트 스코어를 선택하세요'));
 
-    // 점수 상세 입력 토글
-    const toggleBtn = h('button', { cls: 'detail-toggle', onclick: () => { showDetail = !showDetail; draw(); } },
-      showDetail ? '▲ 점수 상세 입력 접기' : '▼ 점수 상세 입력 (선택)',
-    );
-    modal.appendChild(toggleBtn);
-
-    if (showDetail) {
-      // Set rows
-      sets.forEach((set, i) => {
-        const in1 = h('input', { type: 'number', cls: 'set-input', value: set[0], min: '0' });
-        const in2 = h('input', { type: 'number', cls: 'set-input', value: set[1], min: '0' });
-        in1.oninput = e => { sets[i][0] = e.target.value; };
-        in2.oninput = e => { sets[i][1] = e.target.value; };
-
-        const row = d('set-row', s('set-label', `${i + 1}세트`), in1, s('', ' - '), in2);
-        if (i === sets.length - 1 && sets.length > 1) {
-          row.appendChild(h('button', { cls: 'set-rm', onclick: () => { sets.pop(); draw(); } }, '✕'));
-        }
-        modal.appendChild(row);
-      });
-
-      // Score summary
-      const { s1, s2 } = countSets(sets.filter(([a, b]) => a !== '' || b !== ''));
-      modal.appendChild(d('score-display', `${s1} - ${s2}`));
-
-      // Add set button
-      if (s1 < needed && s2 < needed && sets.length < maxSets) {
-        modal.appendChild(h('button', {
-          cls: 'btn btn-secondary', style: 'margin-bottom:8px',
-          onclick: () => { sets.push(['', '']); draw(); }
-        }, '+ 세트 추가'));
+      // 세트 스코어 버튼: 승자는 needed, 패자는 0 ~ needed-1
+      const scoreRow = d('win-btns');
+      for (let loserSets = 0; loserSets < needed; loserSets++) {
+        const s1 = isP1 ? needed : loserSets;
+        const s2 = isP1 ? loserSets : needed;
+        scoreRow.appendChild(h('button', {
+          cls: 'win-btn',
+          style: 'border-color:#27ae60;color:#27ae60;',
+          onclick: () => saveResult(selectedWinner, s1, s2),
+        }, `${s1} - ${s2}`));
       }
+      modal.appendChild(scoreRow);
 
-      // 점수 저장 버튼
+      // 스코어 없이 저장
       modal.appendChild(h('button', {
-        cls: 'btn btn-primary', style: 'margin-top:8px',
-        onclick: () => {
-          const filled = sets.filter(([a, b]) => a !== '' && b !== '');
-          if (!filled.length) { alert('최소 1세트를 입력하세요'); return; }
-          const { s1, s2 } = countSets(filled);
-          let winner = null;
-          if (s1 >= needed) winner = match.player1;
-          else if (s2 >= needed) winner = match.player2;
-          if (!winner) { alert(`${needed}세트를 먼저 이겨야 완료됩니다`); return; }
+        cls: 'btn btn-secondary', style: 'margin-top:4px',
+        onclick: () => saveResult(selectedWinner, 0, 0),
+      }, '스코어 없이 저장'));
 
-          const idx = S.matches.findIndex(m => m.id === S.modalMatchId);
-          S.matches[idx] = { ...match, sets: filled, score1: s1, score2: s2, winner };
-          if (match.phase === 'tournament') advanceTournament(S.matches);
-          S.modalMatchId = null;
-          if (roomCode) apiSave(roomCode, S);
-          startPolling();
-          renderMain();
-        }
-      }, '점수로 저장'));
+      // 뒤로가기
+      modal.appendChild(h('button', {
+        cls: 'detail-toggle', style: 'margin-top:6px',
+        onclick: () => { selectedWinner = null; draw(); },
+      }, '← 승자 다시 선택'));
     }
 
     // 취소
