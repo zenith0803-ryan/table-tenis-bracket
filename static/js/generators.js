@@ -36,6 +36,25 @@ function genRoundRobin(players, type = 'singles') {
   return matches;
 }
 
+// BYE 분산 배치: 각 매치에 최대 1개 BYE만 오도록 배열
+function spreadByes(players, slots) {
+  const numByes = slots - players.length;
+  if (numByes === 0) return [...players];
+  // BYE를 마지막 매치 쌍의 두 번째 슬롯부터 배치
+  const result = new Array(slots).fill(null);
+  const byeSlots = new Set();
+  for (let b = 0; b < numByes; b++) {
+    byeSlots.add(slots - 1 - b * 2);
+  }
+  let pi = 0;
+  for (let i = 0; i < slots; i++) {
+    if (!byeSlots.has(i) && pi < players.length) {
+      result[i] = players[pi++];
+    }
+  }
+  return result;
+}
+
 // ================================================================
 // SINGLE ELIMINATION TOURNAMENT
 // ================================================================
@@ -43,8 +62,7 @@ function genTournament(players, type = 'singles') {
   const shuffled = shuffle(players);
   const rounds = Math.ceil(Math.log2(shuffled.length));
   const slots = Math.pow(2, rounds);
-  const seeded = [...shuffled];
-  while (seeded.length < slots) seeded.push(null);
+  const seeded = spreadByes(shuffled, slots);
 
   const matches = [];
 
@@ -364,8 +382,7 @@ function advanceGroupTournament() {
   const fillBracket = (bracketMatches, players) => {
     const r1 = bracketMatches.filter(m => m.round === 1);
     const slots = r1.length * 2;
-    const seeded = [...players];
-    while (seeded.length < slots) seeded.push(null);
+    const seeded = spreadByes(players, slots);
 
     for (let i = 0; i < r1.length; i++) {
       const p1 = seeded[i * 2], p2 = seeded[i * 2 + 1];
