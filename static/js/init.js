@@ -10,7 +10,7 @@ window.onload = async () => {
       Object.assign(S, room.state);
       startPolling();
     } else {
-      alert('방을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.');
+      alert('대진을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.');
       history.replaceState(null, '', '/');
     }
   }

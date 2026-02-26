@@ -15,18 +15,18 @@ function render() {
 // ================================================================
 async function renderSetupHome(onNew) {
   app.innerHTML = '';
-  app.appendChild(d('header', h('h1', {}, '🏓 탁구 대진표')));
+  app.appendChild(d('header', h('h1', {}, '🏓 탁구매치')));
 
   const content = d('content');
   content.appendChild(d('hero',
     d('hero-icon', '🏓'),
-    d('hero-title', '탁구 대진표'),
+    d('hero-title', '탁구매치'),
     d('hero-sub', '친구들과 함께하는 탁구 대회'),
   ));
   content.appendChild(h('button', { cls: 'btn btn-primary', onclick: onNew }, '새 대회 만들기'));
   content.appendChild(h('hr', { cls: 'divider' }));
 
-  const listTitle = d('dash-section-title', '최근 개설된 방');
+  const listTitle = d('dash-section-title', '최근 대진');
   const listEl = h('div', {});
   content.appendChild(listTitle);
   content.appendChild(listEl);
@@ -34,7 +34,7 @@ async function renderSetupHome(onNew) {
 
   const joinRoom = async (code) => {
     const room = await apiGet(code);
-    if (!room) { alert('방을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.'); return; }
+    if (!room) { alert('대진을 찾을 수 없습니다.\n서버가 재시작되었을 수 있습니다.'); return; }
     roomCode = code;
     Object.assign(S, room.state);
     history.replaceState(null, '', `?room=${code}`);
@@ -46,7 +46,7 @@ async function renderSetupHome(onNew) {
     const res = await fetch('/api/rooms');
     const roomList = await res.json();
     if (roomList.length === 0) {
-      listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '개설된 방이 없습니다'));
+      listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '개설된 대진이 없습니다'));
     } else {
       roomList.forEach(room => {
         const dt = new Date(room.created);
@@ -63,7 +63,7 @@ async function renderSetupHome(onNew) {
           style: 'background:none;border:none;font-size:18px;cursor:pointer;padding:4px;opacity:.5;flex-shrink:0',
           onclick: async (e) => {
             e.stopPropagation();
-            if (!confirm(`방 "${room.code}"을 삭제하시겠습니까?`)) return;
+            if (!confirm(`대진 "${room.code}"을 삭제하시겠습니까?`)) return;
             await apiDelete(room.code);
             renderSetupHome(onNew);
           }
@@ -74,14 +74,14 @@ async function renderSetupHome(onNew) {
       });
     }
   } catch (_) {
-    listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '방 목록을 불러올 수 없습니다'));
+    listEl.appendChild(h('p', { style: 'text-align:center;color:#aaa;font-size:13px;padding:16px 0' }, '대진 목록을 불러올 수 없습니다'));
   }
 }
 
 function renderSetupNew(tmp, onBack) {
   const draw = () => {
     app.innerHTML = '';
-    app.appendChild(d('header', h('h1', {}, '🏓 탁구 대진표')));
+    app.appendChild(d('header', h('h1', {}, '🏓 탁구매치')));
 
     const optGroup = (options, key) =>
       d('option-group', ...options.map(({ value, label }) => {

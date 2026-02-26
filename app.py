@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, request, render_template
 
 app = Flask(__name__)
@@ -10,9 +10,12 @@ rooms = {}
 CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # O, I, 0, 1 제외
 
 
+KST = timezone(timedelta(hours=9))
+
+
 def generate_code():
-    # 형식: YYYYMMDDHHMM_ABC (예: 202502261430_7K3)
-    now_str = datetime.now().strftime('%Y%m%d%H%M')
+    # 형식: YYYYMMDDHHMM_ABC (예: 202502261430_7K3) — KST 기준
+    now_str = datetime.now(KST).strftime('%Y%m%d%H%M')
     suffix = ''.join(random.choices(CHARS, k=3))
     code = f'{now_str}_{suffix}'
     while code in rooms:
@@ -59,7 +62,7 @@ def list_rooms():
 def get_room(code):
     room = rooms.get(code)
     if not room:
-        return jsonify({'error': '방을 찾을 수 없습니다'}), 404
+        return jsonify({'error': '대진을 찾을 수 없습니다'}), 404
     return jsonify(room)
 
 
@@ -67,7 +70,7 @@ def get_room(code):
 def update_room(code):
     room = rooms.get(code)
     if not room:
-        return jsonify({'error': '방을 찾을 수 없습니다'}), 404
+        return jsonify({'error': '대진을 찾을 수 없습니다'}), 404
     room['state'] = request.json.get('state', room['state'])
     room['updated'] = now_iso()
     return jsonify({'ok': True})
@@ -76,7 +79,7 @@ def update_room(code):
 @app.delete('/api/rooms/<code>')
 def delete_room(code):
     if code not in rooms:
-        return jsonify({'error': '방을 찾을 수 없습니다'}), 404
+        return jsonify({'error': '대진을 찾을 수 없습니다'}), 404
     del rooms[code]
     return jsonify({'ok': True})
 

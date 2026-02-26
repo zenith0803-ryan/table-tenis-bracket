@@ -171,7 +171,7 @@ function genJjampong(players) {
 }
 
 // ================================================================
-// 단복단 (단식-복식-단식)
+// 단단복 (단식-단식-복식)
 // ================================================================
 let teamMatchIdSeed = 0;
 
@@ -206,7 +206,7 @@ function genDandokdan(players, doublesMode, tournamentType, existingTeams = []) 
     }
   }
 
-  // 각 팀 대결 → 3경기(단복단) 생성
+  // 각 팀 대결 → 3경기(단단복) 생성
   teamMatchIdSeed = 0;
   const matches = [];
   teamSchedule.forEach(({ t1id, t2id, round }) => {
@@ -221,18 +221,18 @@ function genDandokdan(players, doublesMode, tournamentType, existingTeams = []) 
       p1id: t1.p1id, p2id: t2.p1id,
       teamMatchId: tmId, subRound: 1,
     }));
-    // 복식: A팀(1+2) vs B팀(1+2)
-    matches.push(mkMatch({
-      type: 'doubles', phase: 'dandokdan', round,
-      player1: t1.name, player2: t2.name,
-      p1id: t1.id, p2id: t2.id,
-      teamMatchId: tmId, subRound: 2,
-    }));
     // 단식2: A팀2번 vs B팀2번
     matches.push(mkMatch({
       type: 'singles', phase: 'dandokdan', round,
       player1: t1.p2, player2: t2.p2,
       p1id: t1.p2id, p2id: t2.p2id,
+      teamMatchId: tmId, subRound: 2,
+    }));
+    // 복식: A팀(1+2) vs B팀(1+2)
+    matches.push(mkMatch({
+      type: 'doubles', phase: 'dandokdan', round,
+      player1: t1.name, player2: t2.name,
+      p1id: t1.id, p2id: t2.id,
       teamMatchId: tmId, subRound: 3,
     }));
   });

@@ -8,7 +8,7 @@ function renderMain() {
   const homeBtn = h('button', {
     cls: 'icon-btn',
     onclick: () => {
-      if (!confirm('홈으로 나가시겠습니까?\n(대진표는 방 코드로 다시 참가할 수 있습니다)')) return;
+      if (!confirm('홈으로 나가시겠습니까?\n(탁구대진코드로 다시 참가할 수 있습니다)')) return;
       stopPolling();
       roomCode = null;
       S.screen = 'setup';
@@ -29,7 +29,7 @@ function renderMain() {
 
   app.appendChild(d('header',
     homeBtn,
-    h('h1', {}, '🏓 탁구 대진표'),
+    h('h1', {}, '🏓 탁구매치'),
     d('header-right', roomCode ? s('room-chip', roomCode) : null, shareBtn),
   ));
 
@@ -196,7 +196,7 @@ function renderTeamBoutCard(bout) {
   card.appendChild(header);
 
   // 3경기 서브 리스트
-  const subLabels = { 1: '단식', 2: '복식', 3: '단식' };
+  const subLabels = { 1: '단식', 2: '단식', 3: '복식' };
   bout.forEach(m => {
     const done = !!m.winner;
     const row = d(cx('team-bout-match', done && 'done', m.voided && 'voided'));
@@ -522,7 +522,51 @@ function renderDashboardTab() {
     return content;
   }
 
-  if (gameType === 'jjampong') {
+  if (gameType === 'dandokdan') {
+    // 단단복: 팀 순위 (teamMatchId로 묶어서 계산)
+    const teamStats = {};
+    S.teams.forEach(t => { teamStats[t.name] = { name: t.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
+    const byTM = {};
+    S.matches.filter(m => m.teamMatchId).forEach(m => {
+      (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
+    });
+    Object.values(byTM).forEach(bout => {
+      let t1w = 0, t2w = 0;
+      const m1 = bout.find(m => m.subRound === 1);
+      const t1 = S.teams.find(t => t.p1id === m1.p1id || t.p2id === m1.p1id);
+      const t2 = S.teams.find(t => t.p1id === m1.p2id || t.p2id === m1.p2id);
+      bout.forEach(m => {
+        if (!m.winner || m.voided) return;
+        if (m.winner === m.player1) t1w++; else t2w++;
+      });
+      // 세트 스코어 합산
+      if (t1 && teamStats[t1.name]) { teamStats[t1.name].sw += t1w; teamStats[t1.name].sl += t2w; }
+      if (t2 && teamStats[t2.name]) { teamStats[t2.name].sw += t2w; teamStats[t2.name].sl += t1w; }
+      // 팀 대결 승패 (2선승 달성 시)
+      if (t1w >= 2 && t1 && teamStats[t1.name]) { teamStats[t1.name].w++; teamStats[t1.name].pts += 2; }
+      if (t2w >= 2 && t2 && teamStats[t2.name]) { teamStats[t2.name].w++; teamStats[t2.name].pts += 2; }
+      if (t1w >= 2 && t2 && teamStats[t2.name]) teamStats[t2.name].l++;
+      if (t2w >= 2 && t1 && teamStats[t1.name]) teamStats[t1.name].l++;
+    });
+    const sorted = Object.values(teamStats).sort((a, b) => b.pts - a.pts || b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
+    content.appendChild(d('dash-section',
+      d('dash-section-title', '팀 순위'),
+      h('table', { cls: 'standings-table' },
+        h('thead', {}, h('tr', {},
+          h('th', {}, '#'), h('th', {}, '팀'),
+          h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
+        )),
+        h('tbody', {}, ...sorted.map((t, i) => h('tr', {},
+          h('td', { cls: 'rank' }, `${i + 1}`),
+          h('td', {}, t.name),
+          h('td', { style: 'font-weight:700;color:#e74c3c' }, `${t.pts}`),
+          h('td', {}, `${t.w}`),
+          h('td', {}, `${t.l}`),
+          h('td', {}, `${t.sw}-${t.sl}`),
+        ))),
+      ),
+    ));
+  } else if (gameType === 'jjampong') {
     content.appendChild(d('dash-section',
       d('dash-section-title', '단식 순위'),
       renderStandings('singles'),
@@ -572,9 +616,9 @@ function renderInfoTab() {
 
   if (roomCode) {
     content.appendChild(h('div', {},
-      h('label', {}, '방 코드'),
+      h('label', {}, '탁구대진코드'),
       d('room-code-big', roomCode),
-      h('p', { style: 'text-align:center;font-size:12px;color:#aaa;margin-bottom:16px' }, 'URL 공유 또는 홈 화면 방 목록에서 참가'),
+      h('p', { style: 'text-align:center;font-size:12px;color:#aaa;margin-bottom:16px' }, 'URL 공유 또는 홈 화면 대진 목록에서 참가'),
     ));
   }
 
@@ -628,12 +672,12 @@ function renderInfoTab() {
     }
   }, '🔄 결과 초기화');
 
-  // 방 삭제
+  // 대진 삭제
   const deleteBtn = h('button', {
     cls: 'btn btn-secondary',
     style: 'color:#e74c3c;border-color:#f5b8b2',
     onclick: async () => {
-      if (!confirm('방을 삭제하시겠습니까?\n(모든 데이터가 사라집니다)')) return;
+      if (!confirm('대진을 삭제하시겠습니까?\n(모든 데이터가 사라집니다)')) return;
       if (roomCode) await apiDelete(roomCode);
       stopPolling();
       roomCode = null;
@@ -642,7 +686,7 @@ function renderInfoTab() {
       history.replaceState(null, '', '/');
       render();
     }
-  }, '🗑 방 삭제');
+  }, '🗑 대진 삭제');
 
   content.appendChild(h('div', { style: 'margin-top:8px' }, resetBtn, deleteBtn));
 
