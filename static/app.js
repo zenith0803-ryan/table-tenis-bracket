@@ -69,7 +69,9 @@ function startPolling() {
     const room = await apiGet(roomCode);
     if (!room) return;
     if (JSON.stringify(room.state) !== JSON.stringify(S)) {
+      const tab = S.tab; // 탭은 클라이언트 로컬 상태 — 서버 값으로 덮어쓰지 않음
       Object.assign(S, room.state);
+      S.tab = tab;
       render();
     }
   }, 5000);
@@ -246,7 +248,7 @@ function genJjampong(players) {
 }
 
 // ================================================================
-// SCORING
+// SCORING & HANDICAP
 // ================================================================
 function winsNeeded() {
   return S.settings.scoringFormat === 'bo5' ? 3 : 2;
@@ -261,10 +263,23 @@ function countSets(sets) {
   return { s1, s2 };
 }
 
+// 핸디캡 계산 (단식 경기만 적용, 부수 미설정 시 null 반환)
+// 규칙: 1부 차이 = 2점, 최대 6점 / 높은 부수 번호 = 약한 선수
+function calcHandicap(match) {
+  if (match.type === 'doubles') return null;
+  const p1 = S.players.find(p => p.id === match.p1id);
+  const p2 = S.players.find(p => p.id === match.p2id);
+  if (!p1?.buso || !p2?.buso || p1.buso === p2.buso) return null;
+  const diff = Math.abs(p1.buso - p2.buso);
+  const pts = Math.min(diff * 2, 6);
+  const weakerName = p1.buso > p2.buso ? match.player1 : match.player2;
+  return { player: weakerName, pts };
+}
+
 // 승점/승패 통계 계산 (렌더링과 분리)
 function buildStats(items, matches) {
   const stats = {};
-  items.forEach(p => { stats[p.name] = { name: p.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
+  items.forEach(p => { stats[p.name] = { name: p.name, buso: p.buso || null, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
 
   matches
     .filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles'))
@@ -407,7 +422,7 @@ function renderSetupNew(tmp, onBack) {
         cls: 'btn btn-primary',
         onclick: () => {
           S.settings = { ...tmp };
-          S.players = Array.from({ length: tmp.playerCount }, (_, i) => ({ id: i + 1, name: `선수${i + 1}` }));
+          S.players = Array.from({ length: tmp.playerCount }, (_, i) => ({ id: i + 1, name: `선수${i + 1}`, buso: null }));
           S.teams = []; S.matches = []; S.screen = 'players';
           render();
         }
@@ -439,10 +454,23 @@ function renderPlayers() {
     app.innerHTML = '';
     app.appendChild(d('header', h('h1', {}, '선수 등록')));
 
+    const busoOpts = ['미설정', ...Array.from({ length: 9 }, (_, i) => `${i + 1}부`)];
+
     const playerInputs = players.map((p, i) => {
-      const inp = h('input', { type: 'text', value: p.name, placeholder: `선수 ${i + 1}` });
+      const inp = h('input', { type: 'text', value: p.name, placeholder: `선수 ${i + 1}`, style: 'flex:1' });
       inp.oninput = e => { players[i].name = e.target.value || `선수${i + 1}`; };
-      return d('player-row', s('player-num', `${i + 1}.`), inp);
+
+      const busoSel = h('select', { style: 'width:72px;padding:11px 6px;border:1px solid #ddd;border-radius:8px;font-size:13px', onchange: e => {
+        const v = e.target.value;
+        players[i].buso = v === '미설정' ? null : parseInt(v);
+      }}, ...busoOpts.map(opt => {
+        const o = h('option', { value: opt }, opt);
+        const cur = p.buso ? `${p.buso}부` : '미설정';
+        if (opt === cur) o.selected = true;
+        return o;
+      }));
+
+      return d('player-row', s('player-num', `${i + 1}.`), inp, busoSel);
     });
 
     let teamSection = null;
@@ -540,7 +568,7 @@ function renderMain() {
   ));
 
   // Tabs
-  const tabDefs = [['matches', '경기'], ['bracket', '대진표'], ['info', '정보']];
+  const tabDefs = [['matches', '경기'], ['bracket', '대진표'], ['dashboard', '현황'], ['info', '정보']];
   app.appendChild(d('tabs', ...tabDefs.map(([key, label]) => {
     const t = h('div', { cls: cx('tab', S.tab === key && 'active') }, label);
     t.onclick = () => { S.tab = key; renderMain(); };
@@ -550,6 +578,7 @@ function renderMain() {
   // Tab content
   if (S.tab === 'matches') app.appendChild(renderMatchesTab());
   else if (S.tab === 'bracket') app.appendChild(renderBracketTab());
+  else if (S.tab === 'dashboard') app.appendChild(renderDashboardTab());
   else app.appendChild(renderInfoTab());
 
   // Modal
@@ -636,6 +665,12 @@ function matchCard(m) {
     h('div', { cls: cx('mp right', m.winner === m.player2 && 'winner') }, m.player2),
   ));
 
+  // 핸디캡 표시
+  const hc = calcHandicap(m);
+  if (hc) {
+    card.appendChild(d('ref-note', `핸디캡:`, h('span', { cls: 'ref-badge', style: 'background:#f39c12' }, `${hc.player} +${hc.pts}점`)));
+  }
+
   if (m.referee) {
     card.appendChild(d('ref-note', '심판:', h('span', { cls: 'ref-badge' }, m.referee)));
   }
@@ -714,24 +749,92 @@ function renderBracketTab() {
 function renderStandings(forceType) {
   const gameType = forceType || S.settings.gameType;
   const items = gameType === 'doubles'
-    ? S.teams.map(t => ({ id: t.id, name: t.name }))
+    ? S.teams.map(t => ({ id: t.id, name: t.name, buso: null }))
     : S.players;
 
   const sorted = buildStats(items, S.matches);
+  const hasBuso = sorted.some(p => p.buso);
 
   return h('table', { cls: 'standings-table' },
     h('thead', {}, h('tr', {},
-      h('th', {}, '#'), h('th', {}, '이름'), h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
+      h('th', {}, '#'),
+      h('th', {}, '이름'),
+      hasBuso ? h('th', {}, '부수') : null,
+      h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
     )),
     h('tbody', {}, ...sorted.map((p, i) => h('tr', {},
       h('td', { cls: 'rank' }, `${i + 1}`),
       h('td', {}, p.name),
+      hasBuso ? h('td', { style: 'color:#888;font-size:13px' }, p.buso ? `${p.buso}부` : '-') : null,
       h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
       h('td', {}, `${p.w}`),
       h('td', {}, `${p.l}`),
       h('td', {}, `${p.sw}-${p.sl}`),
     ))),
   );
+}
+
+// ================================================================
+// DASHBOARD TAB
+// ================================================================
+function renderDashboardTab() {
+  const content = d('content');
+  const { gameType } = S.settings;
+
+  // 진행 현황
+  const total = S.matches.filter(m => !m.isBye && !m.pending).length;
+  const done  = S.matches.filter(m => m.winner && !m.isBye).length;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  content.appendChild(d('dash-section',
+    d('dash-section-title', '진행 현황'),
+    d('progress-wrap',
+      d('progress-label',
+        h('span', {}, `${done} / ${total} 경기 완료`),
+        h('strong', {}, `${pct}%`),
+      ),
+      d('progress-bar', h('div', { cls: 'progress-fill', style: `width:${pct}%` })),
+    ),
+  ));
+
+  // 순위
+  if (gameType === 'jjampong') {
+    content.appendChild(d('dash-section',
+      d('dash-section-title', '단식 순위'),
+      renderStandings('singles'),
+    ));
+    const dMatches = S.matches.filter(m => m.phase === 'doubles' && m.winner);
+    if (dMatches.length > 0) {
+      const dbStats = {};
+      dMatches.forEach(m => {
+        if (!dbStats[m.player1]) dbStats[m.player1] = { name: m.player1, w: 0, l: 0 };
+        if (!dbStats[m.player2]) dbStats[m.player2] = { name: m.player2, w: 0, l: 0 };
+        dbStats[m.winner].w++;
+        const loser = m.winner === m.player1 ? m.player2 : m.player1;
+        dbStats[loser].l++;
+      });
+      const dbSorted = Object.values(dbStats).sort((a, b) => b.w - a.w || a.l - b.l);
+      content.appendChild(d('dash-section',
+        d('dash-section-title', '복식 순위'),
+        h('table', { cls: 'standings-table' },
+          h('thead', {}, h('tr', {}, h('th', {}, '#'), h('th', {}, '팀'), h('th', {}, '승'), h('th', {}, '패'))),
+          h('tbody', {}, ...dbSorted.map((p, i) => h('tr', {},
+            h('td', { cls: 'rank' }, `${i + 1}`),
+            h('td', {}, p.name),
+            h('td', {}, `${p.w}`),
+            h('td', {}, `${p.l}`),
+          ))),
+        ),
+      ));
+    }
+  } else {
+    content.appendChild(d('dash-section',
+      d('dash-section-title', '선수 순위'),
+      renderStandings(),
+    ));
+  }
+
+  return content;
 }
 
 // ================================================================
@@ -766,14 +869,17 @@ function renderInfoTab() {
 
   content.appendChild(d('info-box',
     h('h3', {}, '참가자'),
-    ...S.players.map((p, i) => d('info-row', h('span', {}, `${i + 1}. ${p.name}`))),
+    ...S.players.map((p, i) => d('info-row',
+      h('span', {}, `${i + 1}. ${p.name}`),
+      p.buso ? s('info-val', `${p.buso}부`) : null,
+    )),
   ));
 
   return content;
 }
 
 // ================================================================
-// SCORE MODAL
+// SCORE MODAL (빠른 승패 + 세트 상세 선택)
 // ================================================================
 function renderModal() {
   const match = S.matches.find(m => m.id === S.modalMatchId);
@@ -782,54 +888,86 @@ function renderModal() {
   const maxSets = S.settings.scoringFormat === 'bo5' ? 5 : 3;
   const needed = winsNeeded();
   let sets = match.sets.length > 0 ? match.sets.map(s => [...s]) : [['', '']];
+  let showDetail = match.sets.length > 0; // 이미 점수 있으면 상세 펼침
+  const hc = calcHandicap(match);
 
   const overlay = d('overlay');
+
+  const saveWinner = (winner) => {
+    const isP1 = winner === match.player1;
+    const idx = S.matches.findIndex(m => m.id === S.modalMatchId);
+    S.matches[idx] = { ...match, sets: [], score1: isP1 ? needed : 0, score2: isP1 ? 0 : needed, winner };
+    if (match.phase === 'tournament') advanceTournament(S.matches);
+    S.modalMatchId = null;
+    if (roomCode) apiSave(roomCode, S);
+    startPolling();
+    renderMain();
+  };
 
   const draw = () => {
     overlay.innerHTML = '';
     const modal = d('modal');
 
-    modal.appendChild(d('modal-title', '점수 입력'));
+    modal.appendChild(d('modal-title', '경기 결과 입력'));
     modal.appendChild(d('modal-players',
       h('span', {}, match.player1),
       s('modal-vs', 'vs'),
       h('span', {}, match.player2),
     ));
 
-    // Set rows
-    sets.forEach((set, i) => {
-      const in1 = h('input', { type: 'number', cls: 'set-input', value: set[0], min: '0' });
-      const in2 = h('input', { type: 'number', cls: 'set-input', value: set[1], min: '0' });
-      in1.oninput = e => { sets[i][0] = e.target.value; };
-      in2.oninput = e => { sets[i][1] = e.target.value; };
-
-      const row = d('set-row', s('set-label', `${i + 1}세트`), in1, s('', ' - '), in2);
-      if (i === sets.length - 1 && sets.length > 1) {
-        row.appendChild(h('button', { cls: 'set-rm', onclick: () => { sets.pop(); draw(); } }, '✕'));
-      }
-      modal.appendChild(row);
-    });
-
-    // Score summary
-    const { s1, s2 } = countSets(sets.filter(([a, b]) => a !== '' || b !== ''));
-    modal.appendChild(d('score-display', `${s1} - ${s2}`));
-
-    // Add set button
-    if (s1 < needed && s2 < needed && sets.length < maxSets) {
-      modal.appendChild(h('button', {
-        cls: 'btn btn-secondary', style: 'margin-bottom:8px',
-        onclick: () => { sets.push(['', '']); draw(); }
-      }, '+ 세트 추가'));
+    // 핸디캡 표시
+    if (hc) {
+      modal.appendChild(d('modal-handicap', `🏸 핸디캡: ${hc.player} +${hc.pts}점`));
     }
 
-    // Actions
-    modal.appendChild(d('modal-actions',
+    // 빠른 승패 버튼
+    modal.appendChild(d('win-btns',
       h('button', {
-        cls: 'btn btn-secondary',
-        onclick: () => { S.modalMatchId = null; startPolling(); renderMain(); }
-      }, '취소'),
+        cls: 'win-btn p1',
+        onclick: () => saveWinner(match.player1),
+      }, `🏆 ${match.player1} 승`),
       h('button', {
-        cls: 'btn btn-primary',
+        cls: 'win-btn p2',
+        onclick: () => saveWinner(match.player2),
+      }, `🏆 ${match.player2} 승`),
+    ));
+
+    // 점수 상세 입력 토글
+    const toggleBtn = h('button', { cls: 'detail-toggle', onclick: () => { showDetail = !showDetail; draw(); } },
+      showDetail ? '▲ 점수 상세 입력 접기' : '▼ 점수 상세 입력 (선택)',
+    );
+    modal.appendChild(toggleBtn);
+
+    if (showDetail) {
+      // Set rows
+      sets.forEach((set, i) => {
+        const in1 = h('input', { type: 'number', cls: 'set-input', value: set[0], min: '0' });
+        const in2 = h('input', { type: 'number', cls: 'set-input', value: set[1], min: '0' });
+        in1.oninput = e => { sets[i][0] = e.target.value; };
+        in2.oninput = e => { sets[i][1] = e.target.value; };
+
+        const row = d('set-row', s('set-label', `${i + 1}세트`), in1, s('', ' - '), in2);
+        if (i === sets.length - 1 && sets.length > 1) {
+          row.appendChild(h('button', { cls: 'set-rm', onclick: () => { sets.pop(); draw(); } }, '✕'));
+        }
+        modal.appendChild(row);
+      });
+
+      // Score summary
+      const { s1, s2 } = countSets(sets.filter(([a, b]) => a !== '' || b !== ''));
+      modal.appendChild(d('score-display', `${s1} - ${s2}`));
+
+      // Add set button
+      if (s1 < needed && s2 < needed && sets.length < maxSets) {
+        modal.appendChild(h('button', {
+          cls: 'btn btn-secondary', style: 'margin-bottom:8px',
+          onclick: () => { sets.push(['', '']); draw(); }
+        }, '+ 세트 추가'));
+      }
+
+      // 점수 저장 버튼
+      modal.appendChild(h('button', {
+        cls: 'btn btn-primary', style: 'margin-top:8px',
         onclick: () => {
           const filled = sets.filter(([a, b]) => a !== '' && b !== '');
           if (!filled.length) { alert('최소 1세트를 입력하세요'); return; }
@@ -841,16 +979,20 @@ function renderModal() {
 
           const idx = S.matches.findIndex(m => m.id === S.modalMatchId);
           S.matches[idx] = { ...match, sets: filled, score1: s1, score2: s2, winner };
-
           if (match.phase === 'tournament') advanceTournament(S.matches);
-
           S.modalMatchId = null;
           if (roomCode) apiSave(roomCode, S);
           startPolling();
           renderMain();
         }
-      }, '저장'),
-    ));
+      }, '점수로 저장'));
+    }
+
+    // 취소
+    modal.appendChild(h('button', {
+      cls: 'btn btn-secondary', style: 'margin-top:10px',
+      onclick: () => { S.modalMatchId = null; startPolling(); renderMain(); }
+    }, '취소'));
 
     overlay.appendChild(modal);
   };
