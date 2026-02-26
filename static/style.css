@@ -319,3 +319,58 @@ input:focus, select:focus {
   font-size: 10px; font-weight: 800; color: #bbb; margin-bottom: 12px;
   text-transform: uppercase; letter-spacing: .6px;
 }
+
+/* ── Group Section Label (조별 리그) ── */
+.group-section-label {
+  font-size: 13px; font-weight: 800; color: #e74c3c;
+  padding: 12px 0 6px;
+  border-bottom: 2px solid #fde8e4;
+  margin-bottom: 8px; margin-top: 16px;
+}
+.group-section-label:first-child { margin-top: 0; }
+
+/* ── Team Bout Card (단복단) ── */
+.team-bout-card {
+  background: #fff; border-radius: 14px; padding: 14px;
+  margin-bottom: 10px; border: 1.5px solid transparent;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  transition: border-color .15s;
+}
+.team-bout-card.done { border-color: #27ae60; }
+.team-bout-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 10px; margin-bottom: 10px;
+  border-bottom: 1px solid #f0f0f5;
+}
+.team-bout-name {
+  font-size: 14px; font-weight: 700; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.team-bout-name:last-child { text-align: right; }
+.team-bout-name.winner { color: #27ae60; }
+.team-bout-score {
+  font-size: 18px; font-weight: 800; color: #e74c3c;
+  padding: 0 12px; flex-shrink: 0;
+}
+.team-bout-match {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 6px; border-radius: 8px;
+  transition: background .15s;
+}
+.team-bout-match:hover:not(.voided) { background: #f8f8fc; }
+.team-bout-match.voided { opacity: .35; }
+.team-bout-type {
+  font-size: 10px; font-weight: 800; color: #bbb;
+  min-width: 32px; text-transform: uppercase; letter-spacing: .3px;
+}
+.team-bout-player {
+  flex: 1; font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.team-bout-player.right { text-align: right; }
+.team-bout-player.winner { color: #27ae60; }
+.team-bout-vs {
+  font-size: 11px; color: #bbb; font-weight: 600;
+  flex-shrink: 0; padding: 2px 6px;
+  background: #f4f4f8; border-radius: 4px;
+}

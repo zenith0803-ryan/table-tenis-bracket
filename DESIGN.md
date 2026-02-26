@@ -1,127 +1,120 @@
 # 기능 설계 문서
 
+## 완료된 기능 ✅
+
+| 기능 | 설명 |
+|------|------|
+| 탭 전환 버그 수정 | 폴링 시 `S.tab` 클라이언트 상태 유지 |
+| 빠른 승패 입력 | 승자 선택 → 세트 스코어 버튼 (2-0, 2-1 등) |
+| 종합 현황판 탭 | 진행률 + 순위표 |
+| 부수 + 핸디캡 | 1부 차이 = 2점, 최대 6점, matchCard + 모달 표시 |
+| CSS/JS 분리 | `static/style.css`, `static/app.js` 별도 파일 |
+| 방 코드 형식 | `YYYYMMDDHHMM_ABC` 타임스탬프 형식 |
+| 홈 방 목록 | 최근 방 리스트업, 클릭으로 참가 |
+| UI 리디자인 | 그라디언트 헤더, 카드 섀도, 호버 애니메이션 |
+
+---
+
 ## 구현 예정 기능
 
-### 1. 탭 전환 버그 수정 ✅ (완료)
-`startPolling()` 폴링 시 `S.tab`이 서버 값으로 덮어씌워지는 문제.
-탭은 클라이언트 로컬 상태이므로 폴링 후에도 유지.
+### 1. 방 삭제 / 결과 초기화
 
-```javascript
-// static/app.js - startPolling()
-const tab = S.tab;
-Object.assign(S, room.state);
-S.tab = tab;  // 클라이언트 탭 상태 복원
-```
+#### 1-A. 방 삭제
+- **app.py**: `DELETE /api/rooms/<code>` 엔드포인트
+- **홈 화면 방 목록**: 각 카드 우측 🗑 버튼 → confirm → 삭제 → 목록 새로고침
+- **정보 탭**: "방 삭제" 버튼 → 홈으로 이동
 
----
-
-### 2. 빠른 승패 입력 (renderModal 재설계)
-
-**현재:** 세트 점수 필수 입력
-**변경:** 승자 버튼 클릭만으로 완료, 점수는 선택 옵션
-
-```
-┌──────────────────────────────┐
-│  선수A          vs  선수B    │
-│  핸디캡: 선수A +4점 (2부차)  │  ← 부수 설정 시만 표시
-│                              │
-│  [ 선수A 승 ]  [ 선수B 승 ]  │  ← 기본 입력
-│                              │
-│  ▾ 점수 상세 입력 (선택)     │  ← 토글
-│    1세트: [__] - [__]        │
-│    [+ 세트 추가]             │
-│                              │
-│  [취소]                      │
-└──────────────────────────────┘
-```
-
-- 빠른 입력 시: `sets: [], score1: winsNeeded(), score2: 0, winner`
-- 세트 입력 시: 기존 로직 동일 (N세트 먼저 이겨야 저장 가능)
-- `let showDetail = false` 로컬 상태로 토글 관리
+#### 1-B. 결과 초기화 (방 수정)
+- **정보 탭**: "결과 초기화" 버튼
+- 모든 match의 winner/score/sets 초기화
+- tournament phase 재계산
 
 ---
 
-### 3. 현황 탭 추가 (renderDashboardTab)
+### 2. 홈으로 나가기 버튼
 
-탭 순서: `[경기] [대진표] [현황] [정보]`
-
-```
-진행 현황
-[████████░░░░] 7 / 10 경기 완료
-
-순위
-#  이름      부수  승점  승  패  세트
-─────────────────────────────────────
-1  김철수    3부    6    3   0   9-3
-2  박영희    5부    4    2   1   7-5
-3  이민준    7부    2    1   2   5-7
-```
-
-- 모든 게임 타입에서 항상 표시
-- 리그전: 전체 순위
-- 토너먼트: 현재까지 경기 기준 순위
-- 혼합 릴레이: 단식/복식 순위 구분
-- 기존 `buildStats()`, `renderStandings()` 재사용
-- standings-table에 부수 컬럼 추가 (미설정 시 `-`)
+- 메인 헤더에 🏠 버튼 추가
+- confirm → stopPolling → roomCode = null → URL `/` → 홈 화면
 
 ---
 
-### 4. 부수 + 핸디캡 시스템
+### 3. 단복단 (단식-복식-단식) 팀 대결
 
 #### 규칙
-- 1부 차이 = 게임당 2점 핸디캡
-- 최대 6점 (3부 이상 차이 시 동일 적용)
-- 높은 부수 번호 = 약한 선수 (9부 < 8부 < ... < 1부)
+- 팀 구성: 2명 1팀 (자동 or 직접)
+- 팀 대결 순서:
+  1. 단식 — A팀 1번 vs B팀 1번
+  2. 복식 — A팀 (1+2) vs B팀 (1+2)
+  3. 단식 — A팀 2번 vs B팀 2번
+- **2선승제**: 먼저 2경기 이긴 팀 승리, 나머지 경기 voided(회색)
+- 팀 간 방식: 리그전 or 토너먼트
 
-#### State 변경
+#### State 추가
 ```javascript
-players: [{ id, name, buso: null }]
-// buso: 1~9 (부수) or null (미설정)
+settings.gameType: 'dandokdan'
+settings.doublesMode: 'auto' | 'manual'
+// match 필드 추가
+teamMatchId: number   // 3경기를 묶는 ID
+subRound: 1 | 2 | 3  // 1=단식A, 2=복식, 3=단식B
+voided: boolean       // 세트 확정 후 불필요 경기
 ```
 
-#### 선수 등록 화면
-- 이름 입력 옆 부수 select 추가: `미설정 / 1부 / 2부 / ... / 9부`
+#### 신규 함수
+- `genDandokdan(players, mode, tournamentType, existingTeams)`: 팀 생성 + 경기 스케줄
+- `checkTeamBoutWinner(teamMatchId)`: 2승 확인 → voided 처리
+- `saveResult()` 수정 → checkTeamBoutWinner 호출
 
-#### 핸디캡 계산
-```javascript
-function calcHandicap(match) {
-  const p1 = S.players.find(p => p.id === match.p1id);
-  const p2 = S.players.find(p => p.id === match.p2id);
-  if (!p1?.buso || !p2?.buso || p1.buso === p2.buso) return null;
-  const diff = Math.abs(p1.buso - p2.buso);
-  const pts = Math.min(diff * 2, 6);
-  const weakerName = p1.buso > p2.buso ? match.player1 : match.player2;
-  return { player: weakerName, pts };
-}
+#### UI
 ```
-
-#### 핸디캡 표시
-- **matchCard**: 심판 표시와 동일한 스타일로 `선수명 +N점 핸디캡` 표시
-- **renderModal**: 선수 이름 하단에 핸디캡 정보 표시
-- 점수 계산은 변경 없음 (실제 경기에서 핸디캡이 반영된 점수를 입력)
+┌─ A팀 [1] vs [1] B팀 ──────────┐
+│  단식  A팀1 ✓   vs   B팀1     │
+│  복식  A팀  1-0  vs   B팀     │
+│  단식  A팀2      vs   B팀2 ░  │  ← voided
+└───────────────────────────────┘
+```
 
 ---
 
-## 수정 파일
+### 4. 조별 리그 + 상위/하위부 토너먼트
+
+#### 흐름
+```
+선수 N명 → snake draft로 A조 / B조 자동 배정
+각 조 리그전 → 조별 순위 결정
+상위 50%: 상위부 토너먼트 (1위, 2위 시상)
+하위 50%: 하위부 토너먼트 (1위, 2위 시상)
+```
+
+#### 조 배정 (Snake Draft)
+부수 설정 시 부수 순 정렬, 미설정 시 랜덤 셔플 후:
+```
+순서: 1→A, 2→B, 3→B, 4→A, 5→A, 6→B ...
+```
+→ 각 조의 실력 분포가 균등
+
+#### State 추가
+```javascript
+settings.tournamentType: 'group'  // 새 옵션
+players: [{ id, name, buso, group: 'A'|'B' }]
+// match 필드 추가
+groupId: 'A' | 'B' | null
+```
+
+#### 신규 함수
+- `genGroupTournament(players)`: snake draft 배정 + 조별 리그 + 빈 bracket 생성
+- `advanceGroupTournament()`: 조 리그 완료 시 상위/하위부 자동 배치
+
+#### 렌더링
+- **경기 탭**: A조 리그 → B조 리그 → 상위부 → 하위부 순
+- **대진표 탭**: A조 순위 / B조 순위 / 상위부 bracket / 하위부 bracket
+- **현황판**: 전체 진행률 + A/B조 순위 + 상위/하위부 현황
+
+---
+
+## 수정 파일 목록
+
 | 파일 | 변경 내용 |
 |------|-----------|
-| `static/app.js` | 전체 기능 (탭버그/모달/현황탭/부수) |
-| `static/style.css` | 현황탭, 진행바 스타일 추가 |
-
----
-
-## CSS 추가 항목
-```css
-/* 진행 현황 바 */
-.progress-bar { ... }
-.progress-fill { ... }
-
-/* 현황 탭 섹션 제목 */
-.dash-section-title { ... }
-
-/* 빠른 승패 버튼 */
-.win-btn { ... }
-
-/* 점수 상세 토글 */
-.detail-toggle { ... }
-```
+| `static/app.js` | 홈 버튼, 방 삭제, 단복단, 조별 리그 전체 |
+| `app.py` | DELETE /api/rooms/<code> |
+| `static/style.css` | team-bout-card, voided, group-label 스타일 |

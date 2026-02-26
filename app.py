@@ -73,5 +73,13 @@ def update_room(code):
     return jsonify({'ok': True})
 
 
+@app.delete('/api/rooms/<code>')
+def delete_room(code):
+    if code not in rooms:
+        return jsonify({'error': '방을 찾을 수 없습니다'}), 404
+    del rooms[code]
+    return jsonify({'ok': True})
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
