@@ -358,7 +358,7 @@ function genJjampong(players) {
   // Doubles: 3 rounds with rotating random pairings
   const doubles = [];
   const n = players.length;
-  const numRounds = Math.max(3, Math.ceil(n / 2));
+  const numRounds = n % 2 === 1 ? n : Math.max(3, Math.floor(n / 2));
 
   for (let r = 0; r < numRounds; r++) {
     let referee = null;
@@ -492,7 +492,7 @@ function renderSetup() {
     );
 
     const fields = [
-      d('form-group', h('label', {}, '종목'), optGroup([{ value: 'singles', label: '단식' }, { value: 'doubles', label: '복식' }, { value: 'jjampong', label: '짬뽕' }], 'gameType')),
+      d('form-group', h('label', {}, '종목'), optGroup([{ value: 'singles', label: '단식' }, { value: 'doubles', label: '복식' }, { value: 'jjampong', label: '혼합 릴레이' }], 'gameType')),
       d('form-group', h('label', {}, '득점 방식'), optGroup([{ value: 'bo3', label: '3판2승' }, { value: 'bo5', label: '5판3승' }], 'scoringFormat')),
     ];
 
@@ -593,9 +593,15 @@ function renderPlayers() {
             matchIdSeed = 0;
             const { gameType: gt, scoringFormat, tournamentType, doublesMode: dm } = S.settings;
 
+            if (gt === 'doubles' && S.players.length % 2 !== 0) {
+              alert(`복식은 짝수 인원만 가능합니다.\n현재 ${S.players.length}명 → ${S.players.length + 1}명 또는 ${S.players.length - 1}명으로 변경해주세요.`);
+              return;
+            }
+
             if (gt === 'singles') {
               S.matches = tournamentType === 'roundrobin' ? genRoundRobin(S.players) : genTournament(S.players);
             } else if (gt === 'doubles') {
+              if (dm === 'manual') S.teams = teams; // 직접구성 팀 먼저 저장
               const r = genDoubles(S.players, dm, tournamentType);
               S.teams = r.teams; S.matches = r.matches;
             } else {
@@ -779,7 +785,21 @@ function renderBracketTab() {
   const { gameType, tournamentType } = S.settings;
 
   if (gameType === 'jjampong') {
-    content.appendChild(h('p', { style: 'text-align:center;color:#aaa;padding:24px 0;font-size:14px' }, '짬뽕 모드는 경기 탭에서 확인하세요'));
+    // 단식 순위
+    content.appendChild(h('div', { style: 'font-size:13px;font-weight:700;color:#888;margin-bottom:8px' }, '단식 순위'));
+    content.appendChild(renderStandings('singles'));
+
+    // 복식 결과
+    const dMatches = S.matches.filter(m => m.phase === 'doubles' && m.winner);
+    if (dMatches.length > 0) {
+      content.appendChild(h('div', { style: 'font-size:13px;font-weight:700;color:#888;margin:16px 0 8px' }, '복식 결과'));
+      const grouped = {};
+      dMatches.forEach(m => { (grouped[m.round] = grouped[m.round] || []).push(m); });
+      Object.keys(grouped).sort((a,b) => a-b).forEach(r => {
+        content.appendChild(d('round-label', `복식 ${r}라운드`));
+        grouped[r].forEach(m => content.appendChild(matchCard(m)));
+      });
+    }
     return content;
   }
 
@@ -813,33 +833,35 @@ function renderBracketTab() {
   return content;
 }
 
-function renderStandings() {
-  const items = S.settings.gameType === 'doubles'
+function renderStandings(forceType) {
+  const gameType = forceType || S.settings.gameType;
+  const items = gameType === 'doubles'
     ? S.teams.map(t => ({ id: t.id, name: t.name }))
     : S.players;
 
   const stats = {};
-  items.forEach(p => { stats[p.name] = { name: p.name, w: 0, l: 0, sw: 0, sl: 0 }; });
+  items.forEach(p => { stats[p.name] = { name: p.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
 
   S.matches.filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles')).forEach(m => {
     if (!stats[m.player1] || !stats[m.player2]) return;
     const win = m.winner, lose = m.winner === m.player1 ? m.player2 : m.player1;
-    stats[win].w++; stats[lose].l++;
+    stats[win].w++; stats[win].pts += 2; stats[lose].l++;
     stats[win].sw += m.score1 > m.score2 ? m.score1 : m.score2;
     stats[win].sl += m.score1 > m.score2 ? m.score2 : m.score1;
     stats[lose].sw += m.score1 > m.score2 ? m.score2 : m.score1;
     stats[lose].sl += m.score1 > m.score2 ? m.score1 : m.score2;
   });
 
-  const sorted = Object.values(stats).sort((a, b) => b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
+  const sorted = Object.values(stats).sort((a, b) => b.pts - a.pts || b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
 
   return h('table', { cls: 'standings-table' },
     h('thead', {}, h('tr', {},
-      h('th', {}, '#'), h('th', {}, '이름'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
+      h('th', {}, '#'), h('th', {}, '이름'), h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
     )),
     h('tbody', {}, ...sorted.map((p, i) => h('tr', {},
       h('td', { cls: 'rank' }, `${i + 1}`),
       h('td', {}, p.name),
+      h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
       h('td', {}, `${p.w}`),
       h('td', {}, `${p.l}`),
       h('td', {}, `${p.sw}-${p.sl}`),
@@ -866,9 +888,9 @@ function renderInfoTab() {
 
   content.appendChild(d('info-box',
     h('h3', {}, '대회 정보'),
-    d('info-row', h('span', {}, '종목'), s('info-val', gameType === 'singles' ? '단식' : gameType === 'doubles' ? '복식' : '짬뽕')),
+    d('info-row', h('span', {}, '종목'), s('info-val', gameType === 'singles' ? '단식' : gameType === 'doubles' ? '복식' : '단식+복식 혼합 릴레이')),
     d('info-row', h('span', {}, '득점'), s('info-val', scoringFormat === 'bo3' ? '3판2승' : '5판3승')),
-    d('info-row', h('span', {}, '방식'), s('info-val', gameType === 'jjampong' ? '단식+복식 혼합' : tournamentType === 'roundrobin' ? '리그전' : '토너먼트')),
+    d('info-row', h('span', {}, '방식'), s('info-val', gameType === 'jjampong' ? '단식+복식 혼합 릴레이' : tournamentType === 'roundrobin' ? '리그전' : '토너먼트')),
     d('info-row', h('span', {}, '참가자'), s('info-val', `${S.players.length}명`)),
     d('info-row', h('span', {}, '진행'), s('info-val', `${done} / ${total} 경기`)),
   ));
