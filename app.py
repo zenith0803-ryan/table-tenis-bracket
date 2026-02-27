@@ -60,8 +60,13 @@ def index():
     return render_template('index.html')
 
 
+MAX_ROOMS = 10
+
+
 @app.post('/api/rooms')
 def create_room():
+    if len(rooms) >= MAX_ROOMS:
+        return jsonify({'error': '최대 대진 수(10개)를 초과했습니다. 기존 대진을 삭제해주세요.'}), 400
     code = generate_code()
     now = now_iso()
     rooms[code] = {

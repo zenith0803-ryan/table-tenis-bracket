@@ -24,8 +24,8 @@ function renderModal() {
       if (S.settings.gameType === 'dandokdan') advanceDandokdanBracket('lower');
       else advanceBracket(S.matches.filter(m => m.phase === 'lower'));
     }
-    if (match.phase === 'group') advanceGroupTournament();
     if (match.teamMatchId) checkTeamBoutWinner(match.teamMatchId);
+    if (match.phase === 'group') advanceGroupTournament();
     S.modalMatchId = null;
     if (roomCode) apiSave(roomCode, S);
     startPolling();
