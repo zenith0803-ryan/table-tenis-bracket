@@ -16,8 +16,14 @@ function renderModal() {
     const idx = S.matches.findIndex(m => m.id === S.modalMatchId);
     S.matches[idx] = { ...match, sets: [], score1, score2, winner };
     if (match.phase === 'tournament') advanceTournament(S.matches);
-    if (match.phase === 'upper') advanceBracket(S.matches.filter(m => m.phase === 'upper'));
-    if (match.phase === 'lower') advanceBracket(S.matches.filter(m => m.phase === 'lower'));
+    if (match.phase === 'upper') {
+      if (S.settings.gameType === 'dandokdan') advanceDandokdanBracket('upper');
+      else advanceBracket(S.matches.filter(m => m.phase === 'upper'));
+    }
+    if (match.phase === 'lower') {
+      if (S.settings.gameType === 'dandokdan') advanceDandokdanBracket('lower');
+      else advanceBracket(S.matches.filter(m => m.phase === 'lower'));
+    }
     if (match.phase === 'group') advanceGroupTournament();
     if (match.teamMatchId) checkTeamBoutWinner(match.teamMatchId);
     S.modalMatchId = null;

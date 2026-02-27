@@ -57,7 +57,7 @@ function buildStats(items, matches) {
   items.forEach(p => { stats[p.name] = { name: p.name, buso: p.buso || null, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
 
   matches
-    .filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles' || m.phase === 'tournament' || m.phase === 'group'))
+    .filter(m => m.winner && !m.isBye && (m.phase === 'roundrobin' || m.phase === 'singles' || m.phase === 'tournament' || m.phase === 'group' || m.phase === 'doubles'))
     .forEach(m => {
       if (!stats[m.player1] || !stats[m.player2]) return;
       const win = m.winner, lose = win === m.player1 ? m.player2 : m.player1;

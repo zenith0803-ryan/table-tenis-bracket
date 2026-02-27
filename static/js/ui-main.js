@@ -83,15 +83,42 @@ function renderMatchesTab() {
 
   // 조별 리그 + 상위/하위부
   if (S.settings.tournamentType === 'group') {
+    const isDandokdan = S.settings.gameType === 'dandokdan';
+
     // 상위부 우승자 배너
     const upperMatches = S.matches.filter(m => m.phase === 'upper');
     if (upperMatches.length > 0) {
-      const maxR = Math.max(...upperMatches.map(m => m.round));
-      const final = upperMatches.find(m => m.round === maxR);
-      if (final?.winner && final.winner !== '?') {
-        content.appendChild(d('winner-banner',
-          d('trophy', '🏆'), d('wname', final.winner), d('wlabel', '상위부 우승')
-        ));
+      if (isDandokdan) {
+        // 단단복: bout 승자로 우승 확인
+        const maxR = Math.max(...upperMatches.map(m => m.round));
+        const finalMatches = upperMatches.filter(m => m.round === maxR);
+        // bout이면 teamMatchId로 묶어서 확인
+        const byTM = {};
+        finalMatches.forEach(m => {
+          if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
+        });
+        Object.values(byTM).forEach(bout => {
+          let t1w = 0, t2w = 0;
+          const m1 = bout.find(m => m.subRound === 1);
+          if (!m1) return;
+          const t1 = S.teams.find(t => t.p1id === m1.p1id || t.p2id === m1.p1id);
+          const t2 = S.teams.find(t => t.p1id === m1.p2id || t.p2id === m1.p2id);
+          bout.forEach(m => { if (m.winner && !m.voided) { if (m.winner === m.player1) t1w++; else t2w++; } });
+          const winner = t1w >= 2 ? t1 : t2w >= 2 ? t2 : null;
+          if (winner) {
+            content.appendChild(d('winner-banner',
+              d('trophy', '🏆'), d('wname', winner.name), d('wlabel', '상위부 우승')
+            ));
+          }
+        });
+      } else {
+        const maxR = Math.max(...upperMatches.map(m => m.round));
+        const final = upperMatches.find(m => m.round === maxR);
+        if (final?.winner && final.winner !== '?') {
+          content.appendChild(d('winner-banner',
+            d('trophy', '🏆'), d('wname', final.winner), d('wlabel', '상위부 우승')
+          ));
+        }
       }
     }
 
@@ -104,16 +131,38 @@ function renderMatchesTab() {
     sections.forEach(({ label, matches }) => {
       if (matches.length === 0) return;
       content.appendChild(d('group-section-label', label));
-      // 라운드별
-      const byRound = {};
-      matches.forEach(m => { (byRound[m.round] = byRound[m.round] || []).push(m); });
-      Object.keys(byRound).sort((a, b) => a - b).forEach(r => {
-        const list = byRound[r];
-        const isTourn = list[0].phase === 'upper' || list[0].phase === 'lower';
-        const rLabel = isTourn ? roundLabel('tournament', parseInt(r), list.length) : `${r}라운드`;
-        content.appendChild(d('round-label', rLabel));
-        list.forEach(m => content.appendChild(matchCard(m)));
-      });
+
+      if (isDandokdan && matches.some(m => m.teamMatchId)) {
+        // 단단복: team-bout 카드로 묶어서 표시
+        const byRound = {};
+        matches.forEach(m => { (byRound[m.round] = byRound[m.round] || []).push(m); });
+        Object.keys(byRound).sort((a, b) => a - b).forEach(round => {
+          const list = byRound[round];
+          const isTourn = list[0].phase === 'upper' || list[0].phase === 'lower';
+          const rLabel = isTourn ? roundLabel('tournament', parseInt(round), list.length) : `${round}라운드`;
+          content.appendChild(d('round-label', rLabel));
+          const byTM = {};
+          list.forEach(m => {
+            if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
+            else content.appendChild(matchCard(m)); // BYE 등
+          });
+          Object.keys(byTM).forEach(tmId => {
+            const bout = byTM[tmId].sort((a, b) => a.subRound - b.subRound);
+            content.appendChild(renderTeamBoutCard(bout));
+          });
+        });
+      } else {
+        // 단식/복식: 일반 matchCard
+        const byRound = {};
+        matches.forEach(m => { (byRound[m.round] = byRound[m.round] || []).push(m); });
+        Object.keys(byRound).sort((a, b) => a - b).forEach(r => {
+          const list = byRound[r];
+          const isTourn = list[0].phase === 'upper' || list[0].phase === 'lower';
+          const rLabel = isTourn ? roundLabel('tournament', parseInt(r), list.length) : `${r}라운드`;
+          content.appendChild(d('round-label', rLabel));
+          list.forEach(m => content.appendChild(matchCard(m)));
+        });
+      }
     });
     return content;
   }
@@ -290,29 +339,78 @@ function renderBracketTab() {
   const { gameType, tournamentType } = S.settings;
 
   if (tournamentType === 'group') {
+    const isDandokdan = gameType === 'dandokdan';
+    const isDoubles = gameType === 'doubles';
+
     // A조/B조 순위
-    ['A', 'B'].forEach(gid => {
-      const gPlayers = S.players.filter(p => p.group === gid);
-      const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
-      const sorted = buildStats(gPlayers, gMatches);
-      const half = Math.ceil(gPlayers.length / 2);
-      content.appendChild(d('group-section-label', `${gid}조 순위`));
-      const hasBuso = sorted.some(p => p.buso);
-      content.appendChild(h('table', { cls: 'standings-table' },
-        h('thead', {}, h('tr', {},
-          h('th', {}, '#'), h('th', {}, '이름'),
-          hasBuso ? h('th', {}, '부수') : null,
-          h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'),
-        )),
-        h('tbody', {}, ...sorted.map((p, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
-          h('td', { cls: 'rank' }, `${i + 1}`),
-          h('td', {}, p.name),
-          hasBuso ? h('td', { style: 'color:#888;font-size:13px' }, p.buso ? `${p.buso}부` : '-') : null,
-          h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
-          h('td', {}, `${p.w}`), h('td', {}, `${p.l}`),
-        ))),
-      ));
-    });
+    if (isDandokdan) {
+      // 단단복: 팀 bout 결과로 순위
+      ['A', 'B'].forEach(gid => {
+        const gTeams = S.teams.filter(t => t.group === gid);
+        const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
+        const stats = {};
+        gTeams.forEach(t => { stats[t.name] = { name: t.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
+        const byTM = {};
+        gMatches.forEach(m => { if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m); });
+        Object.values(byTM).forEach(bout => {
+          let t1w = 0, t2w = 0;
+          const m1 = bout.find(m => m.subRound === 1);
+          if (!m1) return;
+          const t1 = gTeams.find(t => t.p1id === m1.p1id || t.p2id === m1.p1id);
+          const t2 = gTeams.find(t => t.p1id === m1.p2id || t.p2id === m1.p2id);
+          if (!t1 || !t2) return;
+          bout.forEach(m => { if (m.winner && !m.voided) { if (m.winner === m.player1) t1w++; else t2w++; } });
+          if (stats[t1.name]) { stats[t1.name].sw += t1w; stats[t1.name].sl += t2w; }
+          if (stats[t2.name]) { stats[t2.name].sw += t2w; stats[t2.name].sl += t1w; }
+          if (t1w >= 2 && stats[t1.name]) { stats[t1.name].w++; stats[t1.name].pts += 2; }
+          if (t2w >= 2 && stats[t2.name]) { stats[t2.name].w++; stats[t2.name].pts += 2; }
+          if (t1w >= 2 && stats[t2.name]) stats[t2.name].l++;
+          if (t2w >= 2 && stats[t1.name]) stats[t1.name].l++;
+        });
+        const sorted = Object.values(stats).sort((a, b) => b.pts - a.pts || b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
+        const half = Math.ceil(gTeams.length / 2);
+        content.appendChild(d('group-section-label', `${gid}조 순위`));
+        content.appendChild(h('table', { cls: 'standings-table' },
+          h('thead', {}, h('tr', {},
+            h('th', {}, '#'), h('th', {}, '팀'),
+            h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
+          )),
+          h('tbody', {}, ...sorted.map((t, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
+            h('td', { cls: 'rank' }, `${i + 1}`),
+            h('td', {}, t.name),
+            h('td', { style: 'font-weight:700;color:#e74c3c' }, `${t.pts}`),
+            h('td', {}, `${t.w}`), h('td', {}, `${t.l}`),
+            h('td', {}, `${t.sw}-${t.sl}`),
+          ))),
+        ));
+      });
+    } else {
+      // 단식/복식: 기존 buildStats 기반 순위
+      ['A', 'B'].forEach(gid => {
+        const gItems = isDoubles
+          ? S.teams.filter(t => t.group === gid).map(t => ({ id: t.id, name: t.name, buso: null }))
+          : S.players.filter(p => p.group === gid);
+        const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
+        const sorted = buildStats(gItems, gMatches);
+        const half = Math.ceil(gItems.length / 2);
+        content.appendChild(d('group-section-label', `${gid}조 순위`));
+        const hasBuso = sorted.some(p => p.buso);
+        content.appendChild(h('table', { cls: 'standings-table' },
+          h('thead', {}, h('tr', {},
+            h('th', {}, '#'), h('th', {}, isDoubles ? '팀' : '이름'),
+            hasBuso ? h('th', {}, '부수') : null,
+            h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'),
+          )),
+          h('tbody', {}, ...sorted.map((p, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
+            h('td', { cls: 'rank' }, `${i + 1}`),
+            h('td', {}, p.name),
+            hasBuso ? h('td', { style: 'color:#888;font-size:13px' }, p.buso ? `${p.buso}부` : '-') : null,
+            h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
+            h('td', {}, `${p.w}`), h('td', {}, `${p.l}`),
+          ))),
+        ));
+      });
+    }
 
     // 상위/하위부 bracket
     const renderBracketSection = (phase, label) => {
@@ -324,17 +422,51 @@ function renderBracketTab() {
       const rounds = d('bracket-rounds');
       for (let r = 1; r <= maxRound; r++) {
         const rm = bm.filter(m => m.round === r);
-        const col = d('bracket-col');
-        col.appendChild(d('bracket-col-label', roundLabel('tournament', r, rm.length)));
-        rm.forEach(m => {
-          const isBye = v => v === 'BYE' || v === '?';
-          const bMatch = h('div', { cls: cx('bracket-match', m.winner && 'done') });
-          bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player1) && 'bye', m.winner === m.player1 && 'winner') }, m.player1 || '?'));
-          bMatch.appendChild(h('hr', { cls: 'bdivider' }));
-          bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player2) && 'bye', m.winner === m.player2 && 'winner') }, m.player2 || '?'));
-          col.appendChild(bMatch);
-        });
-        rounds.appendChild(col);
+        // 단단복 bracket은 bout 단위로 표시
+        if (isDandokdan && rm.some(m => m.teamMatchId)) {
+          const col = d('bracket-col');
+          col.appendChild(d('bracket-col-label', roundLabel('tournament', r, rm.length)));
+          const byTM = {};
+          rm.forEach(m => {
+            if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
+            else {
+              // BYE 등
+              const isBye = v => v === 'BYE' || v === '?';
+              const bMatch = h('div', { cls: cx('bracket-match', m.winner && 'done') });
+              bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player1) && 'bye', m.winner === m.player1 && 'winner') }, m.player1 || '?'));
+              bMatch.appendChild(h('hr', { cls: 'bdivider' }));
+              bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player2) && 'bye', m.winner === m.player2 && 'winner') }, m.player2 || '?'));
+              col.appendChild(bMatch);
+            }
+          });
+          Object.values(byTM).forEach(bout => {
+            const m1 = bout.find(m => m.subRound === 1);
+            const t1 = S.teams.find(t => t.p1id === m1?.p1id || t.p2id === m1?.p1id);
+            const t2 = S.teams.find(t => t.p1id === m1?.p2id || t.p2id === m1?.p2id);
+            let t1w = 0, t2w = 0;
+            bout.forEach(m => { if (m.winner && !m.voided) { if (m.winner === m.player1) t1w++; else t2w++; } });
+            const boutDone = t1w >= 2 || t2w >= 2;
+            const boutWinner = t1w >= 2 ? t1?.name : t2w >= 2 ? t2?.name : null;
+            const bMatch = h('div', { cls: cx('bracket-match', boutDone && 'done') });
+            bMatch.appendChild(h('div', { cls: cx('bp', boutWinner === t1?.name && 'winner') }, `${t1?.name || '?'} (${t1w})`));
+            bMatch.appendChild(h('hr', { cls: 'bdivider' }));
+            bMatch.appendChild(h('div', { cls: cx('bp', boutWinner === t2?.name && 'winner') }, `${t2?.name || '?'} (${t2w})`));
+            col.appendChild(bMatch);
+          });
+          rounds.appendChild(col);
+        } else {
+          const col = d('bracket-col');
+          col.appendChild(d('bracket-col-label', roundLabel('tournament', r, rm.length)));
+          rm.forEach(m => {
+            const isBye = v => v === 'BYE' || v === '?';
+            const bMatch = h('div', { cls: cx('bracket-match', m.winner && 'done') });
+            bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player1) && 'bye', m.winner === m.player1 && 'winner') }, m.player1 || '?'));
+            bMatch.appendChild(h('hr', { cls: 'bdivider' }));
+            bMatch.appendChild(h('div', { cls: cx('bp', isBye(m.player2) && 'bye', m.winner === m.player2 && 'winner') }, m.player2 || '?'));
+            col.appendChild(bMatch);
+          });
+          rounds.appendChild(col);
+        }
       }
       wrap.appendChild(rounds);
       content.appendChild(wrap);
@@ -480,43 +612,91 @@ function renderDashboardTab() {
 
   // 순위
   if (S.settings.tournamentType === 'group') {
-    ['A', 'B'].forEach(gid => {
-      const gPlayers = S.players.filter(p => p.group === gid);
-      const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
-      const sorted = buildStats(gPlayers, gMatches);
-      const half = Math.ceil(gPlayers.length / 2);
-      const hasBuso = sorted.some(p => p.buso);
-      content.appendChild(d('dash-section',
-        d('dash-section-title', `${gid}조 순위`),
-        h('table', { cls: 'standings-table' },
-          h('thead', {}, h('tr', {},
-            h('th', {}, '#'), h('th', {}, '이름'),
-            hasBuso ? h('th', {}, '부수') : null,
-            h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'),
-          )),
-          h('tbody', {}, ...sorted.map((p, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
-            h('td', { cls: 'rank' }, `${i + 1}`),
-            h('td', {}, p.name),
-            hasBuso ? h('td', { style: 'color:#888;font-size:13px' }, p.buso ? `${p.buso}부` : '-') : null,
-            h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
-            h('td', {}, `${p.w}`), h('td', {}, `${p.l}`),
-          ))),
-        ),
-      ));
-    });
+    const isDandokdan = gameType === 'dandokdan';
+    const isDoubles = gameType === 'doubles';
+
+    if (isDandokdan) {
+      // 단단복 조별리그: 팀 bout 결과로 순위
+      ['A', 'B'].forEach(gid => {
+        const gTeams = S.teams.filter(t => t.group === gid);
+        const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
+        const stats = {};
+        gTeams.forEach(t => { stats[t.name] = { name: t.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
+        const byTM = {};
+        gMatches.forEach(m => { if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m); });
+        Object.values(byTM).forEach(bout => {
+          let t1w = 0, t2w = 0;
+          const m1 = bout.find(m => m.subRound === 1);
+          if (!m1) return;
+          const t1 = gTeams.find(t => t.p1id === m1.p1id || t.p2id === m1.p1id);
+          const t2 = gTeams.find(t => t.p1id === m1.p2id || t.p2id === m1.p2id);
+          if (!t1 || !t2) return;
+          bout.forEach(m => { if (m.winner && !m.voided) { if (m.winner === m.player1) t1w++; else t2w++; } });
+          if (stats[t1.name]) { stats[t1.name].sw += t1w; stats[t1.name].sl += t2w; }
+          if (stats[t2.name]) { stats[t2.name].sw += t2w; stats[t2.name].sl += t1w; }
+          if (t1w >= 2 && stats[t1.name]) { stats[t1.name].w++; stats[t1.name].pts += 2; }
+          if (t2w >= 2 && stats[t2.name]) { stats[t2.name].w++; stats[t2.name].pts += 2; }
+          if (t1w >= 2 && stats[t2.name]) stats[t2.name].l++;
+          if (t2w >= 2 && stats[t1.name]) stats[t1.name].l++;
+        });
+        const sorted = Object.values(stats).sort((a, b) => b.pts - a.pts || b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
+        const half = Math.ceil(gTeams.length / 2);
+        content.appendChild(d('dash-section',
+          d('dash-section-title', `${gid}조 순위`),
+          h('table', { cls: 'standings-table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, '#'), h('th', {}, '팀'),
+              h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'), h('th', {}, '세트'),
+            )),
+            h('tbody', {}, ...sorted.map((t, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
+              h('td', { cls: 'rank' }, `${i + 1}`),
+              h('td', {}, t.name),
+              h('td', { style: 'font-weight:700;color:#e74c3c' }, `${t.pts}`),
+              h('td', {}, `${t.w}`), h('td', {}, `${t.l}`),
+              h('td', {}, `${t.sw}-${t.sl}`),
+            ))),
+          ),
+        ));
+      });
+    } else {
+      ['A', 'B'].forEach(gid => {
+        const gItems = isDoubles
+          ? S.teams.filter(t => t.group === gid).map(t => ({ id: t.id, name: t.name, buso: null }))
+          : S.players.filter(p => p.group === gid);
+        const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
+        const sorted = buildStats(gItems, gMatches);
+        const half = Math.ceil(gItems.length / 2);
+        const hasBuso = sorted.some(p => p.buso);
+        content.appendChild(d('dash-section',
+          d('dash-section-title', `${gid}조 순위`),
+          h('table', { cls: 'standings-table' },
+            h('thead', {}, h('tr', {},
+              h('th', {}, '#'), h('th', {}, isDoubles ? '팀' : '이름'),
+              hasBuso ? h('th', {}, '부수') : null,
+              h('th', {}, '승점'), h('th', {}, '승'), h('th', {}, '패'),
+            )),
+            h('tbody', {}, ...sorted.map((p, i) => h('tr', { style: i < half ? '' : 'opacity:.5' },
+              h('td', { cls: 'rank' }, `${i + 1}`),
+              h('td', {}, p.name),
+              hasBuso ? h('td', { style: 'color:#888;font-size:13px' }, p.buso ? `${p.buso}부` : '-') : null,
+              h('td', { style: 'font-weight:700;color:#e74c3c' }, `${p.pts}`),
+              h('td', {}, `${p.w}`), h('td', {}, `${p.l}`),
+            ))),
+          ),
+        ));
+      });
+    }
+
     // 상위/하위부 진행 현황
     ['upper', 'lower'].forEach(phase => {
       const bm = S.matches.filter(m => m.phase === phase);
       if (bm.length === 0) return;
-      const bTotal = bm.filter(m => !m.isBye && !m.pending).length;
-      const bDone = bm.filter(m => m.winner && !m.isBye).length;
+      const bTotal = bm.filter(m => !m.isBye && !m.pending && !m.voided).length;
+      const bDone = bm.filter(m => m.winner && !m.isBye && !m.voided).length;
       const label = phase === 'upper' ? '🏆 상위부' : '하위부';
-      const maxR = Math.max(...bm.map(m => m.round));
-      const final = bm.find(m => m.round === maxR);
       content.appendChild(d('dash-section',
         d('dash-section-title', `${label} 토너먼트`),
         h('div', { style: 'font-size:13px;color:#888;margin-bottom:4px' }, `${bDone} / ${bTotal} 경기 완료`),
-        final?.winner && final.winner !== '?' ? d('', h('div', { style: 'font-weight:700;color:#27ae60;font-size:15px' }, `1위: ${final.winner}`)) : null,
       ));
     });
     return content;
@@ -649,24 +829,46 @@ function renderInfoTab() {
     style: 'margin-bottom:8px',
     onclick: () => {
       if (!confirm('모든 경기 결과를 초기화하시겠습니까?')) return;
-      S.matches = S.matches.map(m => {
-        if (m.isBye) return m;
-        const reset = { ...m, winner: null, score1: 0, score2: 0, sets: [], voided: false };
-        // 토너먼트 2라운드 이상은 미결 상태로
-        if (m.phase === 'tournament' && m.round > 1) {
-          reset.player1 = '?'; reset.player2 = '?';
-          reset.p1id = null; reset.p2id = null;
-          reset.pending = true;
-        }
-        // 상위/하위부 전체 초기화 (조별 리그 다시 해야 하므로)
-        if (m.phase === 'upper' || m.phase === 'lower') {
-          reset.player1 = '?'; reset.player2 = '?';
-          reset.p1id = null; reset.p2id = null;
-          reset.pending = true;
-        }
-        return reset;
-      });
-      advanceTournament(S.matches);
+
+      // 단단복/복식 group인 경우 upper/lower bracket의 bout 매치를 제거하고 placeholder로 교체
+      if (tournamentType === 'group' && (gameType === 'dandokdan' || gameType === 'doubles')) {
+        // upper/lower 매치 제거
+        S.matches = S.matches.filter(m => m.phase !== 'upper' && m.phase !== 'lower');
+        // group 매치 초기화
+        S.matches = S.matches.map(m => {
+          if (m.isBye) return m;
+          return { ...m, winner: null, score1: 0, score2: 0, sets: [], voided: false };
+        });
+        // 빈 bracket 다시 생성
+        const teamsA = S.teams.filter(t => t.group === 'A');
+        const teamsB = S.teams.filter(t => t.group === 'B');
+        const halfA = Math.ceil(teamsA.length / 2);
+        const halfB = Math.ceil(teamsB.length / 2);
+        const upperCount = halfA + halfB;
+        const lowerCount = (teamsA.length - halfA) + (teamsB.length - halfB);
+        const bracketType = gameType === 'doubles' ? 'doubles' : 'doubles';
+        const upper = genEmptyBracket(upperCount, 'upper', bracketType);
+        const lower = genEmptyBracket(lowerCount, 'lower', bracketType);
+        S.matches.push(...upper, ...lower);
+      } else {
+        S.matches = S.matches.map(m => {
+          if (m.isBye) return m;
+          const reset = { ...m, winner: null, score1: 0, score2: 0, sets: [], voided: false };
+          if (m.phase === 'tournament' && m.round > 1) {
+            reset.player1 = '?'; reset.player2 = '?';
+            reset.p1id = null; reset.p2id = null;
+            reset.pending = true;
+          }
+          if (m.phase === 'upper' || m.phase === 'lower') {
+            reset.player1 = '?'; reset.player2 = '?';
+            reset.p1id = null; reset.p2id = null;
+            reset.pending = true;
+          }
+          return reset;
+        });
+        advanceTournament(S.matches);
+      }
+
       if (roomCode) apiSave(roomCode, S);
       render();
     }

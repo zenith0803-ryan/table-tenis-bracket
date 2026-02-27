@@ -91,7 +91,7 @@ function renderSetupNew(tmp, onBack) {
       }));
 
     const countSel = h('select', { onchange: e => { tmp.playerCount = parseInt(e.target.value); } },
-      ...[...Array(15)].map((_, i) => {
+      ...[...Array(29)].map((_, i) => {
         const n = i + 2;
         const o = h('option', { value: n }, `${n}명`);
         if (tmp.playerCount === n) o.selected = true;
@@ -117,9 +117,7 @@ function renderSetupNew(tmp, onBack) {
         { value: 'roundrobin', label: LABEL.mode.roundrobin },
         { value: 'tournament', label: LABEL.mode.tournament },
       ];
-      if (tmp.gameType === 'singles') {
-        modeOpts.push({ value: 'group', label: LABEL.mode.group });
-      }
+      modeOpts.push({ value: 'group', label: LABEL.mode.group });
       fields.push(d('form-group', h('label', {}, '경기 방식'), optGroup(modeOpts, 'tournamentType')));
     }
     if (tmp.gameType === 'doubles' || tmp.gameType === 'dandokdan') {
@@ -241,12 +239,24 @@ function renderPlayers() {
               return;
             }
 
-            if (gt === 'singles' && tournamentType === 'group') {
-              if (S.players.length < 4) {
+            if (tournamentType === 'group') {
+              if (gt === 'singles' && S.players.length < 4) {
                 alert('조별 리그는 최소 4명 이상 필요합니다.');
                 return;
               }
-              S.matches = genGroupTournament(S.players);
+              if ((gt === 'doubles' || gt === 'dandokdan') && S.players.length < 4) {
+                alert('조별 리그는 최소 2팀(4명) 이상 필요합니다.');
+                return;
+              }
+              if (gt === 'singles') {
+                S.matches = genGroupTournament(S.players, 'singles');
+              } else if (gt === 'doubles') {
+                const r = genGroupTournament(S.players, 'doubles', dm, dm === 'manual' ? teams : []);
+                S.teams = r.teams; S.matches = r.matches;
+              } else if (gt === 'dandokdan') {
+                const r = genGroupTournament(S.players, 'dandokdan', dm, dm === 'manual' ? teams : []);
+                S.teams = r.teams; S.matches = r.matches;
+              }
             } else if (gt === 'singles') {
               S.matches = tournamentType === 'roundrobin' ? genRoundRobin(S.players) : genTournament(S.players);
             } else if (gt === 'doubles') {

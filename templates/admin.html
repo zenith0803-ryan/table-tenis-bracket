@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - 탁구매치</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; padding: 16px; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 20px; margin-bottom: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .card h2 { font-size: 14px; color: #888; margin-bottom: 8px; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { text-align: center; }
+    .stat .num { font-size: 28px; font-weight: 700; color: #e74c3c; }
+    .stat .label { font-size: 12px; color: #888; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #eee; color: #888; font-weight: 600; }
+    td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }
+    tr:hover { background: #fafafa; }
+    .mono { font-family: monospace; font-size: 12px; }
+    .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-danger { background: #e74c3c; color: #fff; }
+    .btn-danger:hover { background: #c0392b; }
+    .btn-secondary { background: #eee; color: #333; }
+    .btn-secondary:hover { background: #ddd; }
+    .actions { display: flex; gap: 8px; margin-top: 8px; }
+    .log-list { max-height: 300px; overflow-y: auto; font-size: 12px; font-family: monospace; }
+    .log-item { padding: 3px 0; border-bottom: 1px solid #f5f5f5; display: flex; gap: 8px; }
+    .log-item .time { color: #888; min-width: 100px; }
+    .log-item .method { font-weight: 600; min-width: 40px; }
+    .log-item .path { color: #2c3e50; }
+    .log-item .ip { color: #aaa; margin-left: auto; }
+    .server-info { font-size: 12px; color: #aaa; margin-bottom: 12px; }
+    .refresh-note { font-size: 11px; color: #bbb; text-align: center; margin-top: 8px; }
+    .game-type { font-size: 11px; color: #888; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Admin - 탁구매치</h1>
+  <div class="server-info" id="serverInfo"></div>
+
+  <div class="card">
+    <h2>방문자 현황</h2>
+    <div class="stats">
+      <div class="stat"><div class="num" id="totalReq">-</div><div class="label">총 요청수</div></div>
+      <div class="stat"><div class="num" id="uniqueIp">-</div><div class="label">고유 IP</div></div>
+      <div class="stat"><div class="num" id="activeRooms">-</div><div class="label">활성 대진</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>활성 대진 목록</h2>
+    <table>
+      <thead><tr><th>코드</th><th>종목</th><th>인원</th><th>경기</th><th>생성</th></tr></thead>
+      <tbody id="roomList"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>최근 활동 로그</h2>
+    <div class="log-list" id="logList"></div>
+  </div>
+
+  <div class="card">
+    <h2>서버 관리</h2>
+    <div class="actions">
+      <button class="btn btn-danger" onclick="restartServer()">서버 재시작</button>
+      <button class="btn btn-secondary" onclick="loadStats()">새로고침</button>
+    </div>
+  </div>
+
+  <div class="refresh-note">10초마다 자동 새로고침</div>
+
+<script>
+const ADMIN_KEY = '{{ key }}';
+
+async function loadStats() {
+  try {
+    const res = await fetch(`/api/admin/stats?key=${ADMIN_KEY}`);
+    const data = await res.json();
+
+    document.getElementById('totalReq').textContent = data.totalRequests.toLocaleString();
+    document.getElementById('uniqueIp').textContent = data.uniqueIps.toLocaleString();
+    document.getElementById('activeRooms').textContent = data.activeRooms;
+    document.getElementById('serverInfo').textContent = `서버 시작: ${data.serverStart}`;
+
+    const roomList = document.getElementById('roomList');
+    roomList.innerHTML = '';
+    if (data.rooms.length === 0) {
+      roomList.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:12px">활성 대진 없음</td></tr>';
+    } else {
+      data.rooms.forEach(r => {
+        const tr = document.createElement('tr');
+        const dt = new Date(r.created);
+        const timeStr = `${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+        const typeLabels = { singles: '단식', doubles: '복식', dandokdan: '단단복', jjampong: '혼합' };
+        tr.innerHTML = `
+          <td class="mono">${r.code}</td>
+          <td><span class="game-type">${typeLabels[r.gameType] || r.gameType}</span></td>
+          <td>${r.playerCount}명</td>
+          <td>${r.matchCount}</td>
+          <td class="mono">${timeStr}</td>
+        `;
+        roomList.appendChild(tr);
+      });
+    }
+
+    const logList = document.getElementById('logList');
+    logList.innerHTML = '';
+    const logs = data.recentLog.reverse();
+    logs.forEach(log => {
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      item.innerHTML = `
+        <span class="time">${log.time}</span>
+        <span class="method">${log.method}</span>
+        <span class="path">${log.path}</span>
+        <span class="ip">${log.ip}</span>
+      `;
+      logList.appendChild(item);
+    });
+  } catch (e) {
+    console.error('Stats load failed:', e);
+  }
+}
+
+async function restartServer() {
+  if (!confirm('서버를 재시작하시겠습니까?\n모든 대진 데이터가 초기화됩니다.')) return;
+  try {
+    await fetch(`/api/admin/restart?key=${ADMIN_KEY}`, { method: 'POST' });
+  } catch (_) {
+    // 서버가 종료되므로 에러 발생은 정상
+  }
+  alert('서버 재시작 중... 잠시 후 페이지를 새로고침하세요.');
+}
+
+loadStats();
+setInterval(loadStats, 10000);
+</script>
+</body>
+</html>

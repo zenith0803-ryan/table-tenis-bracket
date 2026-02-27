@@ -23,9 +23,18 @@ table_tenis_bracket/
 ├── .gitignore
 ├── static/
 │   ├── style.css       # 전체 CSS
-│   └── app.js          # 전체 SPA JavaScript
+│   └── js/             # SPA JavaScript (모듈별 분리)
+│       ├── state.js    # 상태 + 상수
+│       ├── api.js      # API + 폴링
+│       ├── helpers.js  # DOM 헬퍼 + 통계
+│       ├── generators.js # 대진 생성 로직
+│       ├── ui-setup.js # 설정/선수 등록 화면
+│       ├── ui-main.js  # 메인 화면 (경기/대진표/현황/정보)
+│       ├── modal.js    # 스코어 입력 모달
+│       └── init.js     # 초기화
 └── templates/
-    └── index.html      # HTML 골격 (CSS/JS 링크만)
+    ├── index.html      # HTML 골격 (CSS/JS 링크만)
+    └── admin.html      # 어드민 페이지
 ```
 
 ## API 명세
@@ -35,6 +44,10 @@ table_tenis_bracket/
 | POST | `/api/rooms` | 새 방 생성 → `{ code }` 반환 |
 | GET | `/api/rooms/<code>` | 방 상태 조회 |
 | PUT | `/api/rooms/<code>` | 방 상태 업데이트 |
+| DELETE | `/api/rooms/<code>` | 방 삭제 |
+| GET | `/admin?key=` | 어드민 페이지 |
+| GET | `/api/admin/stats?key=` | 어드민 통계 JSON |
+| POST | `/api/admin/restart?key=` | 서버 재시작 |
 
 ### 방 코드 형식
 - 6자리 대문자+숫자 (혼동 방지로 O, I, 0, 1 제외)
@@ -57,10 +70,10 @@ rooms = {
   screen: 'setup' | 'players' | 'main',
   tab: 'matches' | 'bracket' | 'dashboard' | 'info',
   settings: {
-    gameType: 'singles' | 'doubles' | 'jjampong',
+    gameType: 'singles' | 'doubles' | 'dandokdan' | 'jjampong',
     doublesMode: 'auto' | 'manual',
     scoringFormat: 'bo3' | 'bo5',
-    tournamentType: 'tournament' | 'roundrobin',
+    tournamentType: 'tournament' | 'roundrobin' | 'group',
     playerCount: number,
   },
   players: [{ id, name, buso: null | number }],  // buso: 1~9부
@@ -79,8 +92,9 @@ rooms = {
 ## 경기 모드
 | 모드 | 설명 |
 |------|------|
-| 단식 | 개인 1 vs 1. 토너먼트 or 리그전 |
-| 복식 | 2인팀 대결. 자동 매칭(랜덤) or 직접 팀 구성. 짝수 인원만 가능 |
+| 단식 | 개인 1 vs 1. 토너먼트, 리그전, 조별리그+토너먼트 |
+| 복식 | 2인팀 대결. 토너먼트, 리그전, 조별리그+토너먼트. 짝수 인원만 가능 |
+| 단단복 | 2인팀 단체전 (단식-단식-복식, 2선승). 토너먼트, 리그전, 조별리그+토너먼트 |
 | 혼합 릴레이 | 단식 리그전 + 복식 다회전 자동 생성. 홀수 참가 가능 (복식 시 1명 돌아가며 심판) |
 
 ## 부수/핸디캡 시스템
