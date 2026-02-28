@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.pingpongmatch.app",
+    "sha256_cert_fingerprints": ["TODO:PWABuilder에서_생성된_SHA256_핑거프린트를_여기에_입력"]
+  }
+}]

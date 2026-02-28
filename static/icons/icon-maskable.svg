@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full background for maskable (safe area = 80% center) -->
+  <rect width="512" height="512" fill="#1a73e8"/>
+  <!-- Paddle (centered in safe area) -->
+  <ellipse cx="230" cy="230" rx="80" ry="96" fill="#e8e8e8" stroke="#333" stroke-width="6"/>
+  <rect x="214" y="318" width="32" height="72" rx="6" fill="#8B4513" stroke="#333" stroke-width="5"/>
+  <!-- Ball -->
+  <circle cx="330" cy="180" r="32" fill="#ff6b35" stroke="#fff" stroke-width="3"/>
+</svg>

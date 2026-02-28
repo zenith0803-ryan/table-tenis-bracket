@@ -3,7 +3,7 @@ import sys
 import random
 from collections import deque
 from datetime import datetime, timezone, timedelta
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_from_directory
 
 app = Flask(__name__)
 
@@ -58,6 +58,11 @@ def track_visit():
 @app.get('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/.well-known/assetlinks.json')
+def asset_links():
+    return send_from_directory('static', 'assetlinks.json', mimetype='application/json')
 
 
 MAX_ROOMS = 10

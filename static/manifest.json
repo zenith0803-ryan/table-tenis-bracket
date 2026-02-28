@@ -1,0 +1,17 @@
+{
+  "name": "탁구매치 - 탁구 대회 대진표",
+  "short_name": "탁구매치",
+  "description": "친구/동호회용 탁구 대회 대진표 웹 앱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f7",
+  "theme_color": "#1a73e8",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
