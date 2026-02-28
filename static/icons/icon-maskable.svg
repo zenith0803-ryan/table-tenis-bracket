@@ -1,9 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Full background for maskable (safe area = 80% center) -->
-  <rect width="512" height="512" fill="#1a73e8"/>
-  <!-- Paddle (centered in safe area) -->
-  <ellipse cx="230" cy="230" rx="80" ry="96" fill="#e8e8e8" stroke="#333" stroke-width="6"/>
-  <rect x="214" y="318" width="32" height="72" rx="6" fill="#8B4513" stroke="#333" stroke-width="5"/>
-  <!-- Ball -->
-  <circle cx="330" cy="180" r="32" fill="#ff6b35" stroke="#fff" stroke-width="3"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1964e6"/>
+      <stop offset="100%" stop-color="#28a0c8"/>
+    </linearGradient>
+  </defs>
+  <!-- Full bleed background for maskable -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- Content in 80% safe area (centered) -->
+  <g transform="translate(51.2, 51.2) scale(0.8)">
+    <!-- Paddle shadow -->
+    <ellipse cx="194" cy="172" rx="74" ry="82" fill="rgba(0,0,0,0.15)" transform="translate(4,4)"/>
+    <!-- Paddle head -->
+    <ellipse cx="194" cy="172" rx="74" ry="82" fill="#dc3232" stroke="#b41e1e" stroke-width="3"/>
+    <!-- Rubber lines -->
+    <line x1="158" y1="110" x2="158" y2="234" stroke="#c82828" stroke-width="1.5"/>
+    <line x1="180" y1="110" x2="180" y2="234" stroke="#c82828" stroke-width="1.5"/>
+    <line x1="202" y1="110" x2="202" y2="234" stroke="#c82828" stroke-width="1.5"/>
+    <line x1="224" y1="110" x2="224" y2="234" stroke="#c82828" stroke-width="1.5"/>
+    <!-- Handle -->
+    <rect x="180" y="240" width="28" height="72" rx="6" fill="#8b5a2b" stroke="#64400e" stroke-width="2"/>
+    <line x1="184" y1="255" x2="204" y2="255" stroke="#78461e" stroke-width="1.5"/>
+    <line x1="184" y1="270" x2="204" y2="270" stroke="#78461e" stroke-width="1.5"/>
+    <line x1="184" y1="285" x2="204" y2="285" stroke="#78461e" stroke-width="1.5"/>
+    <line x1="184" y1="300" x2="204" y2="300" stroke="#78461e" stroke-width="1.5"/>
+    <!-- Ball shadow -->
+    <circle cx="303" cy="123" r="31" fill="rgba(0,0,0,0.12)" transform="translate(3,3)"/>
+    <!-- Ball (white) -->
+    <circle cx="303" cy="123" r="31" fill="#fff" stroke="#ddd" stroke-width="3"/>
+    <ellipse cx="303" cy="123" rx="19" ry="31" fill="none" stroke="#ccc" stroke-width="1.5"/>
+    <circle cx="293" cy="112" r="8" fill="rgba(255,255,255,0.8)"/>
+    <!-- Net -->
+    <rect x="56" y="310" width="6" height="24" rx="2" fill="rgba(255,255,255,0.55)"/>
+    <rect x="450" y="310" width="6" height="24" rx="2" fill="rgba(255,255,255,0.55)"/>
+    <rect x="56" y="328" width="400" height="6" rx="2" fill="rgba(255,255,255,0.4)"/>
+    <!-- Stars -->
+    <circle cx="360" cy="80" r="3.2" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="90" cy="90" r="3.2" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="380" cy="220" r="3.2" fill="rgba(255,255,255,0.6)"/>
+  </g>
 </svg>
