@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pingpong-v2';
+const CACHE_NAME = 'pingpong-v3';
 const STATIC_ASSETS = [
   '/',
   '/static/style.css',
