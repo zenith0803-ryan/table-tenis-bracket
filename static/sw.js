@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pingpong-v3';
+const CACHE_NAME = 'pingpong-v4';
 const STATIC_ASSETS = [
   '/',
   '/static/style.css',
@@ -36,6 +36,13 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(e.request).then(cached => {
+      const fetched = fetch(e.request).then(res => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        return res;
+      });
+      return cached || fetched;
+    })
   );
 });
