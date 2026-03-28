@@ -240,6 +240,10 @@ input:focus, select:focus {
   backdrop-filter: blur(6px);
   z-index: 200; display: flex; align-items: flex-end;
 }
+.qr-overlay { align-items: center; justify-content: center; }
+.qr-modal { border-radius: 24px; max-width: 300px; text-align: center; }
+.qr-box { display: flex; justify-content: center; margin: 20px 0; }
+.qr-box canvas, .qr-box img { border-radius: 8px; }
 .modal {
   background: #fff; border-radius: 24px 24px 0 0;
   padding: 24px 16px 40px;

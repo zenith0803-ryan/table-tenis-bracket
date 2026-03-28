@@ -27,10 +27,40 @@ function renderMain() {
     }
   }, '🔗');
 
+  const qrBtn = h('button', {
+    cls: 'icon-btn',
+    onclick: () => {
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay qr-overlay';
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      const modal = document.createElement('div');
+      modal.className = 'modal qr-modal';
+      modal.innerHTML = '<div class="modal-title">QR 코드</div>';
+      const qrBox = document.createElement('div');
+      qrBox.className = 'qr-box';
+      modal.appendChild(qrBox);
+      new QRCode(qrBox, {
+        text: location.href,
+        width: 200,
+        height: 200,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      const closeBtn = h('button', { cls: 'btn', onclick: () => overlay.remove() }, '닫기');
+      const actionWrap = document.createElement('div');
+      actionWrap.className = 'modal-actions';
+      actionWrap.appendChild(closeBtn);
+      modal.appendChild(actionWrap);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    }
+  }, '📱');
+
   app.appendChild(d('header',
     homeBtn,
     h('h1', {}, '🏓 탁구매치'),
-    d('header-right', roomCode ? s('room-chip', roomCode) : null, shareBtn),
+    d('header-right', roomCode ? s('room-chip', roomCode) : null, shareBtn, qrBtn),
   ));
 
   // Tabs
