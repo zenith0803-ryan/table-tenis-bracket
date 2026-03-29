@@ -211,7 +211,7 @@ function renderPlayers() {
     app.innerHTML = '';
     app.appendChild(d('header', h('h1', {}, '선수 등록')));
 
-    const busoOpts = ['미설정', ...Array.from({ length: 9 }, (_, i) => `${i + 1}부`)];
+    const busoOpts = ['미설정', ...Array.from({ length: 12 }, (_, i) => `${i + 1}부`)];
 
     const isManualGroup = S.settings.tournamentType === 'group' && S.settings.groupMode === 'manual';
     const groupLabels = getGroupLabels(S.settings.groupCount || 2);
