@@ -273,53 +273,59 @@ function checkTeamBoutWinner(teamMatchId) {
 // ================================================================
 // 조별 리그 + 상위/하위부 토너먼트
 // ================================================================
-// Snake draft 조 배정 헬퍼
-function snakeDraft(items) {
+// Snake draft 조 배정 헬퍼 (N조 지원)
+function snakeDraft(items, numGroups = 2) {
+  const labels = getGroupLabels(numGroups);
   items.forEach((item, i) => {
-    const row = Math.floor(i / 2);
-    item.group = (row % 2 === 0) ? (i % 2 === 0 ? 'A' : 'B') : (i % 2 === 0 ? 'B' : 'A');
+    const row = Math.floor(i / numGroups);
+    const col = i % numGroups;
+    item.group = labels[row % 2 === 0 ? col : (numGroups - 1 - col)];
   });
 }
 
-function genGroupTournament(players, gameType = 'singles', doublesMode = 'auto', existingTeams = []) {
+function genGroupTournament(players, gameType = 'singles', doublesMode = 'auto', existingTeams = [], groupMode = 'auto', groupCount = 2) {
   if (gameType === 'singles') {
-    return genGroupTournamentSingles(players);
+    return genGroupTournamentSingles(players, groupMode, groupCount);
   } else if (gameType === 'doubles') {
-    return genGroupTournamentDoubles(players, doublesMode, existingTeams);
+    return genGroupTournamentDoubles(players, doublesMode, existingTeams, groupMode, groupCount);
   } else if (gameType === 'dandokdan') {
-    return genGroupTournamentDandokdan(players, doublesMode, existingTeams);
+    return genGroupTournamentDandokdan(players, doublesMode, existingTeams, groupMode, groupCount);
   }
-  return genGroupTournamentSingles(players);
+  return genGroupTournamentSingles(players, groupMode, groupCount);
 }
 
-function genGroupTournamentSingles(players) {
-  const hasBuso = players.some(p => p.buso);
-  const sorted = hasBuso
-    ? [...players].sort((a, b) => (a.buso || 99) - (b.buso || 99))
-    : shuffle(players);
+function genGroupTournamentSingles(players, groupMode = 'auto', groupCount = 2) {
+  if (groupMode === 'manual') {
+    // 수동 편성: 선수에 이미 group이 지정되어 있음
+  } else {
+    const hasBuso = players.some(p => p.buso);
+    const sorted = hasBuso
+      ? [...players].sort((a, b) => (a.buso || 99) - (b.buso || 99))
+      : shuffle(players);
+    snakeDraft(sorted, groupCount);
+  }
 
-  snakeDraft(sorted);
+  const labels = getGroupLabels(groupCount);
+  const allGroupMatches = [];
+  let upperCount = 0, lowerCount = 0;
 
-  const groupA = players.filter(p => p.group === 'A');
-  const groupB = players.filter(p => p.group === 'B');
-
-  const matchesA = genRoundRobin(groupA, 'singles');
-  matchesA.forEach(m => { m.phase = 'group'; m.groupId = 'A'; });
-  const matchesB = genRoundRobin(groupB, 'singles');
-  matchesB.forEach(m => { m.phase = 'group'; m.groupId = 'B'; });
-
-  const halfA = Math.ceil(groupA.length / 2);
-  const halfB = Math.ceil(groupB.length / 2);
-  const upperCount = halfA + halfB;
-  const lowerCount = (groupA.length - halfA) + (groupB.length - halfB);
+  labels.forEach(gid => {
+    const group = players.filter(p => p.group === gid);
+    const matches = genRoundRobin(group, 'singles');
+    matches.forEach(m => { m.phase = 'group'; m.groupId = gid; });
+    allGroupMatches.push(...matches);
+    const half = Math.ceil(group.length / 2);
+    upperCount += half;
+    lowerCount += group.length - half;
+  });
 
   const upperMatches = genEmptyBracket(upperCount, 'upper');
   const lowerMatches = genEmptyBracket(lowerCount, 'lower');
 
-  return [...matchesA, ...matchesB, ...upperMatches, ...lowerMatches];
+  return [...allGroupMatches, ...upperMatches, ...lowerMatches];
 }
 
-function genGroupTournamentDoubles(players, doublesMode, existingTeams) {
+function genGroupTournamentDoubles(players, doublesMode, existingTeams, groupMode = 'auto', groupCount = 2) {
   // 팀 생성
   let teams = existingTeams;
   if (doublesMode === 'auto') {
@@ -331,32 +337,37 @@ function genGroupTournamentDoubles(players, doublesMode, existingTeams) {
     }
   }
 
-  // 팀을 snake draft로 A/B조 배정
-  const sortedTeams = [...teams];
-  snakeDraft(sortedTeams);
+  // 조 배정
+  if (groupMode === 'manual') {
+    teams.forEach(t => {
+      const p1 = players.find(p => p.id === t.p1id);
+      t.group = (p1 && p1.group) || 'A';
+    });
+  } else {
+    snakeDraft(teams, groupCount);
+  }
 
-  const groupA = sortedTeams.filter(t => t.group === 'A').map(t => ({ id: t.id, name: t.name }));
-  const groupB = sortedTeams.filter(t => t.group === 'B').map(t => ({ id: t.id, name: t.name }));
+  const labels = getGroupLabels(groupCount);
+  const allGroupMatches = [];
+  let upperCount = 0, lowerCount = 0;
 
-  // 조별 리그 (복식 RR)
-  const matchesA = genRoundRobin(groupA, 'doubles');
-  matchesA.forEach(m => { m.phase = 'group'; m.groupId = 'A'; });
-  const matchesB = genRoundRobin(groupB, 'doubles');
-  matchesB.forEach(m => { m.phase = 'group'; m.groupId = 'B'; });
-
-  // 상위/하위부 빈 bracket
-  const halfA = Math.ceil(groupA.length / 2);
-  const halfB = Math.ceil(groupB.length / 2);
-  const upperCount = halfA + halfB;
-  const lowerCount = (groupA.length - halfA) + (groupB.length - halfB);
+  labels.forEach(gid => {
+    const group = teams.filter(t => t.group === gid).map(t => ({ id: t.id, name: t.name }));
+    const matches = genRoundRobin(group, 'doubles');
+    matches.forEach(m => { m.phase = 'group'; m.groupId = gid; });
+    allGroupMatches.push(...matches);
+    const half = Math.ceil(group.length / 2);
+    upperCount += half;
+    lowerCount += group.length - half;
+  });
 
   const upperMatches = genEmptyBracket(upperCount, 'upper', 'doubles');
   const lowerMatches = genEmptyBracket(lowerCount, 'lower', 'doubles');
 
-  return { teams, matches: [...matchesA, ...matchesB, ...upperMatches, ...lowerMatches] };
+  return { teams, matches: [...allGroupMatches, ...upperMatches, ...lowerMatches] };
 }
 
-function genGroupTournamentDandokdan(players, doublesMode, existingTeams) {
+function genGroupTournamentDandokdan(players, doublesMode, existingTeams, groupMode = 'auto', groupCount = 2) {
   // 팀 생성
   let teams = existingTeams;
   if (doublesMode === 'auto') {
@@ -368,12 +379,17 @@ function genGroupTournamentDandokdan(players, doublesMode, existingTeams) {
     }
   }
 
-  // 팀을 snake draft로 A/B조 배정
-  const sortedTeams = [...teams];
-  snakeDraft(sortedTeams);
+  // 조 배정
+  if (groupMode === 'manual') {
+    teams.forEach(t => {
+      const p1 = players.find(p => p.id === t.p1id);
+      t.group = (p1 && p1.group) || 'A';
+    });
+  } else {
+    snakeDraft(teams, groupCount);
+  }
 
-  const teamGroupA = sortedTeams.filter(t => t.group === 'A');
-  const teamGroupB = sortedTeams.filter(t => t.group === 'B');
+  const labels = getGroupLabels(groupCount);
 
   // 조별 리그: 각 조 내에서 팀 대결 (단단복 bout)
   teamMatchIdSeed = 0;
@@ -413,21 +429,22 @@ function genGroupTournamentDandokdan(players, doublesMode, existingTeams) {
     return matches;
   };
 
-  const matchesA = genGroupBouts(teamGroupA, 'A');
-  const matchesB = genGroupBouts(teamGroupB, 'B');
+  const allGroupMatches = [];
+  let upperCount = 0, lowerCount = 0;
 
-  // 상위/하위부 빈 bracket (단단복 bout 형식)
-  const halfA = Math.ceil(teamGroupA.length / 2);
-  const halfB = Math.ceil(teamGroupB.length / 2);
-  const upperCount = halfA + halfB;
-  const lowerCount = (teamGroupA.length - halfA) + (teamGroupB.length - halfB);
+  labels.forEach(gid => {
+    const teamGroup = teams.filter(t => t.group === gid);
+    const matches = genGroupBouts(teamGroup, gid);
+    allGroupMatches.push(...matches);
+    const half = Math.ceil(teamGroup.length / 2);
+    upperCount += half;
+    lowerCount += teamGroup.length - half;
+  });
 
-  // 단단복의 bracket은 팀 bout 형식이므로 doubles type으로 빈 bracket 생성
-  // (advanceGroupTournament에서 실제 bout 매치로 교체)
   const upperMatches = genEmptyBracket(upperCount, 'upper', 'doubles');
   const lowerMatches = genEmptyBracket(lowerCount, 'lower', 'doubles');
 
-  return { teams, matches: [...matchesA, ...matchesB, ...upperMatches, ...lowerMatches] };
+  return { teams, matches: [...allGroupMatches, ...upperMatches, ...lowerMatches] };
 }
 
 // 빈 토너먼트 bracket 생성 (선수 미정)
@@ -480,27 +497,31 @@ function advanceGroupTournament() {
   if (upperR1.some(m => m.player1 !== '?' || m.player2 !== '?')) return;
 
   const isDoubles = gameType === 'doubles';
+  const groupCount = S.settings.groupCount || 2;
+  const labels = getGroupLabels(groupCount);
 
-  // A/B조 항목 (단식: players, 복식: teams)
+  // 각 조별 항목 + 순위
   const allItems = isDoubles
     ? S.teams.map(t => ({ id: t.id, name: t.name, buso: null, group: t.group }))
     : S.players;
-  const groupA = allItems.filter(p => p.group === 'A');
-  const groupB = allItems.filter(p => p.group === 'B');
-  const statsA = buildStats(groupA, groupMatches.filter(m => m.groupId === 'A'));
-  const statsB = buildStats(groupB, groupMatches.filter(m => m.groupId === 'B'));
 
-  const halfA = Math.ceil(groupA.length / 2);
-  const halfB = Math.ceil(groupB.length / 2);
+  const groupStats = {};
+  const groupItems = {};
+  labels.forEach(gid => {
+    groupItems[gid] = allItems.filter(p => p.group === gid);
+    groupStats[gid] = buildStats(groupItems[gid], groupMatches.filter(m => m.groupId === gid));
+  });
 
-  // 교차 시드: A조1 vs B조2, B조1 vs A조2 ...
-  const seedCross = (stA, stB, count) => {
+  // 교차 시드: 각 조 1위, 각 조 2위, ... 순으로 인터리브
+  const seedCross = (statsPerGroup) => {
     const seeded = [];
-    const aTop = stA.slice(0, Math.ceil(count / 2));
-    const bTop = stB.slice(0, Math.ceil(count / 2));
-    for (let i = 0; i < Math.max(aTop.length, bTop.length); i++) {
-      if (aTop[i]) seeded.push(allItems.find(p => p.name === aTop[i].name));
-      if (bTop[i]) seeded.push(allItems.find(p => p.name === bTop[i].name));
+    const maxLen = Math.max(...Object.values(statsPerGroup).map(s => s.length));
+    for (let rank = 0; rank < maxLen; rank++) {
+      labels.forEach(gid => {
+        if (statsPerGroup[gid][rank]) {
+          seeded.push(allItems.find(p => p.name === statsPerGroup[gid][rank].name));
+        }
+      });
     }
     return seeded;
   };
@@ -524,11 +545,18 @@ function advanceGroupTournament() {
     advanceBracket(bracketMatches);
   };
 
-  const upperItems = seedCross(statsA.slice(0, halfA), statsB.slice(0, halfB), halfA + halfB);
-  fillBracket(upperMatches, upperItems);
+  // 상위부: 각 조 상위 절반
+  const upperStatsPerGroup = {};
+  const lowerStatsPerGroup = {};
+  labels.forEach(gid => {
+    const half = Math.ceil(groupItems[gid].length / 2);
+    upperStatsPerGroup[gid] = groupStats[gid].slice(0, half);
+    lowerStatsPerGroup[gid] = groupStats[gid].slice(half);
+  });
+
+  fillBracket(upperMatches, seedCross(upperStatsPerGroup));
   if (lowerMatches.length > 0) {
-    const lowerItems = seedCross(statsA.slice(halfA), statsB.slice(halfB), (groupA.length - halfA) + (groupB.length - halfB));
-    fillBracket(lowerMatches, lowerItems);
+    fillBracket(lowerMatches, seedCross(lowerStatsPerGroup));
   }
 }
 
@@ -547,14 +575,16 @@ function advanceGroupTournamentDandokdan() {
   const upperR1 = upperPlaceholders.filter(m => m.round === 1);
   if (upperR1.some(m => m.player1 !== '?' || m.player2 !== '?')) return;
 
-  // 팀 bout 결과로 A/B조 팀 순위 계산
+  const groupCount = S.settings.groupCount || 2;
+  const labels = getGroupLabels(groupCount);
+
+  // 팀 bout 결과로 각 조 팀 순위 계산
   const calcTeamGroupStats = (groupId) => {
     const gMatches = groupMatches.filter(m => m.groupId === groupId);
     const gTeams = S.teams.filter(t => t.group === groupId);
     const stats = {};
     gTeams.forEach(t => { stats[t.id] = { id: t.id, name: t.name, w: 0, l: 0, sw: 0, sl: 0, pts: 0 }; });
 
-    // teamMatchId로 묶어서 bout 승패 계산
     const byTM = {};
     gMatches.forEach(m => {
       if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
@@ -581,20 +611,27 @@ function advanceGroupTournamentDandokdan() {
     return Object.values(stats).sort((a, b) => b.pts - a.pts || b.w - a.w || (b.sw - b.sl) - (a.sw - a.sl));
   };
 
-  const statsA = calcTeamGroupStats('A');
-  const statsB = calcTeamGroupStats('B');
+  // 각 조 순위 + 상위/하위 분리
+  const upperStatsPerGroup = {};
+  const lowerStatsPerGroup = {};
+  labels.forEach(gid => {
+    const gTeams = S.teams.filter(t => t.group === gid);
+    const stats = calcTeamGroupStats(gid);
+    const half = Math.ceil(gTeams.length / 2);
+    upperStatsPerGroup[gid] = stats.slice(0, half);
+    lowerStatsPerGroup[gid] = stats.slice(half);
+  });
 
-  const teamsA = S.teams.filter(t => t.group === 'A');
-  const teamsB = S.teams.filter(t => t.group === 'B');
-  const halfA = Math.ceil(teamsA.length / 2);
-  const halfB = Math.ceil(teamsB.length / 2);
-
-  // 교차 시드
-  const seedCrossTeams = (stA, stB) => {
+  // 교차 시드: 각 조 순위별 인터리브
+  const seedCrossTeams = (statsPerGroup) => {
     const seeded = [];
-    for (let i = 0; i < Math.max(stA.length, stB.length); i++) {
-      if (stA[i]) seeded.push(S.teams.find(t => t.id === stA[i].id));
-      if (stB[i]) seeded.push(S.teams.find(t => t.id === stB[i].id));
+    const maxLen = Math.max(...Object.values(statsPerGroup).map(s => s.length));
+    for (let rank = 0; rank < maxLen; rank++) {
+      labels.forEach(gid => {
+        if (statsPerGroup[gid][rank]) {
+          seeded.push(S.teams.find(t => t.id === statsPerGroup[gid][rank].id));
+        }
+      });
     }
     return seeded;
   };
@@ -668,8 +705,8 @@ function advanceGroupTournamentDandokdan() {
     }
   };
 
-  const upperTeams = seedCrossTeams(statsA.slice(0, halfA), statsB.slice(0, halfB));
-  const lowerTeams = seedCrossTeams(statsA.slice(halfA), statsB.slice(halfB));
+  const upperTeams = seedCrossTeams(upperStatsPerGroup);
+  const lowerTeams = seedCrossTeams(lowerStatsPerGroup);
 
   createBracketBouts(upperTeams, 'upper');
   if (lowerTeams.length >= 2) {

@@ -91,7 +91,7 @@ function renderSetupNew(tmp, onBack) {
       }));
 
     const countSel = h('select', { onchange: e => { tmp.playerCount = parseInt(e.target.value); } },
-      ...[...Array(29)].map((_, i) => {
+      ...[...Array(99)].map((_, i) => {
         const n = i + 2;
         const o = h('option', { value: n }, `${n}명`);
         if (tmp.playerCount === n) o.selected = true;
@@ -126,6 +126,25 @@ function renderSetupNew(tmp, onBack) {
         { value: 'manual', label: LABEL.doublesMode.manual },
       ], 'doublesMode')));
     }
+    if (tmp.tournamentType === 'group') {
+      fields.push(d('form-group', h('label', {}, '조 편성'), optGroup([
+        { value: 'auto',   label: LABEL.groupMode.auto },
+        { value: 'manual', label: LABEL.groupMode.manual },
+      ], 'groupMode')));
+
+      const maxGroups = Math.min(8, Math.floor(tmp.playerCount / 2));
+      if (tmp.groupCount > maxGroups) tmp.groupCount = maxGroups;
+      const groupCountSel = h('select', { onchange: e => { tmp.groupCount = parseInt(e.target.value); draw(); } },
+        ...Array.from({ length: Math.max(0, maxGroups - 1) }, (_, i) => {
+          const n = i + 2;
+          const labels = getGroupLabels(n).map(g => `${g}조`).join(', ');
+          const o = h('option', { value: n }, `${n}개조 (${labels})`);
+          if (tmp.groupCount === n) o.selected = true;
+          return o;
+        })
+      );
+      fields.push(d('form-group', h('label', {}, '조 수'), groupCountSel));
+    }
     fields.push(d('form-group', h('label', {}, '참가 인원'), countSel));
 
     app.appendChild(d('content',
@@ -139,7 +158,14 @@ function renderSetupNew(tmp, onBack) {
         cls: 'btn btn-primary',
         onclick: () => {
           S.settings = { ...tmp };
-          S.players = Array.from({ length: tmp.playerCount }, (_, i) => ({ id: i + 1, name: `선수${i + 1}`, buso: null }));
+          S.players = Array.from({ length: tmp.playerCount }, (_, i) => {
+            const p = { id: i + 1, name: `선수${i + 1}`, buso: null };
+            if (tmp.tournamentType === 'group' && tmp.groupMode === 'manual') {
+              const labels = getGroupLabels(tmp.groupCount || 2);
+              p.group = labels[i % labels.length];
+            }
+            return p;
+          });
           S.teams = []; S.matches = []; S.screen = 'players';
           render();
         }
@@ -173,6 +199,10 @@ function renderPlayers() {
 
     const busoOpts = ['미설정', ...Array.from({ length: 9 }, (_, i) => `${i + 1}부`)];
 
+    const isManualGroup = S.settings.tournamentType === 'group' && S.settings.groupMode === 'manual';
+    const groupLabels = getGroupLabels(S.settings.groupCount || 2);
+    const groupOpts = groupLabels.map(g => `${g}조`);
+
     const playerInputs = players.map((p, i) => {
       const inp = h('input', { type: 'text', value: p.name, placeholder: `선수 ${i + 1}`, style: 'flex:1' });
       inp.oninput = e => { players[i].name = e.target.value || `선수${i + 1}`; };
@@ -187,7 +217,20 @@ function renderPlayers() {
         return o;
       }));
 
-      return d('player-row', s('player-num', `${i + 1}.`), inp, busoSel);
+      const els = [s('player-num', `${i + 1}.`), inp, busoSel];
+
+      if (isManualGroup) {
+        const groupSel = h('select', { style: 'width:62px;padding:11px 6px;border:1px solid #ddd;border-radius:8px;font-size:13px', onchange: e => {
+          players[i].group = e.target.value.replace('조', '');
+        }}, ...groupOpts.map(opt => {
+          const o = h('option', { value: opt }, opt);
+          if (opt === `${p.group}조`) o.selected = true;
+          return o;
+        }));
+        els.push(groupSel);
+      }
+
+      return d('player-row', ...els);
     });
 
     let teamSection = null;
@@ -248,13 +291,35 @@ function renderPlayers() {
                 alert('조별 리그는 최소 2팀(4명) 이상 필요합니다.');
                 return;
               }
+              // 수동 편성 검증
+              const gm = S.settings.groupMode;
+              const gc = S.settings.groupCount || 2;
+              const gLabels = getGroupLabels(gc);
+              if (gm === 'manual') {
+                const counts = gLabels.map(g => ({ g, c: S.players.filter(p => p.group === g).length }));
+                const tooSmall = counts.find(x => x.c < 2);
+                if (tooSmall) {
+                  alert(`${tooSmall.g}조에 최소 2명 이상 배정해야 합니다. (현재 ${tooSmall.c}명)`);
+                  return;
+                }
+                if ((gt === 'doubles' || gt === 'dandokdan') && counts.some(x => x.c % 2 !== 0)) {
+                  alert('복식/단단복은 각 조의 인원이 짝수여야 합니다.');
+                  return;
+                }
+                const maxC = Math.max(...counts.map(x => x.c));
+                const minC = Math.min(...counts.map(x => x.c));
+                if (maxC - minC > maxC * 0.5) {
+                  const summary = counts.map(x => `${x.g}조 ${x.c}명`).join(', ');
+                  if (!confirm(`조별 인원 차이가 큽니다.\n${summary}\n그래도 진행하시겠습니까?`)) return;
+                }
+              }
               if (gt === 'singles') {
-                S.matches = genGroupTournament(S.players, 'singles');
+                S.matches = genGroupTournament(S.players, 'singles', 'auto', [], gm, gc);
               } else if (gt === 'doubles') {
-                const r = genGroupTournament(S.players, 'doubles', dm, dm === 'manual' ? teams : []);
+                const r = genGroupTournament(S.players, 'doubles', dm, dm === 'manual' ? teams : [], gm, gc);
                 S.teams = r.teams; S.matches = r.matches;
               } else if (gt === 'dandokdan') {
-                const r = genGroupTournament(S.players, 'dandokdan', dm, dm === 'manual' ? teams : []);
+                const r = genGroupTournament(S.players, 'dandokdan', dm, dm === 'manual' ? teams : [], gm, gc);
                 S.teams = r.teams; S.matches = r.matches;
               }
             } else if (gt === 'singles') {

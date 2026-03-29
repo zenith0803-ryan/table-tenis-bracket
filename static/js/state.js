@@ -9,6 +9,8 @@ let S = {
   settings: {
     gameType: 'singles',
     doublesMode: 'auto',
+    groupMode: 'auto',
+    groupCount: 2,
     scoringFormat: 'bo3',
     tournamentType: 'roundrobin',
     playerCount: 4,
@@ -22,6 +24,7 @@ let S = {
 let roomCode = null;
 let pollTimer = null;
 let matchIdSeed = 0;
+let groupFilter = null;  // 경기 탭 조/부 필터 (null = 첫 번째 조)
 
 // ================================================================
 // CONSTANTS
@@ -31,4 +34,8 @@ const LABEL = {
   format:      { bo3: '3판2승', bo5: '5판3승' },
   mode:        { roundrobin: '리그전', tournament: '토너먼트', group: '조별리그+토너먼트' },
   doublesMode: { auto: '자동 매칭', manual: '직접 구성' },
+  groupMode:   { auto: '자동 편성', manual: '수동 편성' },
 };
+
+const GROUP_LABELS = 'ABCDEFGH'.split('');
+function getGroupLabels(count) { return GROUP_LABELS.slice(0, count); }

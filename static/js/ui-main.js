@@ -152,18 +152,35 @@ function renderMatchesTab() {
       }
     }
 
+    const gLabels = getGroupLabels(S.settings.groupCount || 2);
     const sections = [
-      { label: 'A조 리그', matches: S.matches.filter(m => m.phase === 'group' && m.groupId === 'A') },
-      { label: 'B조 리그', matches: S.matches.filter(m => m.phase === 'group' && m.groupId === 'B') },
-      { label: '🏆 상위부 토너먼트', matches: S.matches.filter(m => m.phase === 'upper') },
-      { label: '하위부 토너먼트', matches: S.matches.filter(m => m.phase === 'lower') },
-    ];
-    sections.forEach(({ label, matches }) => {
-      if (matches.length === 0) return;
-      content.appendChild(d('group-section-label', label));
+      ...gLabels.map(gid => ({ key: `group-${gid}`, label: `${gid}조 리그`, matches: S.matches.filter(m => m.phase === 'group' && m.groupId === gid) })),
+      { key: 'upper', label: '🏆 상위부 토너먼트', matches: S.matches.filter(m => m.phase === 'upper') },
+      { key: 'lower', label: '하위부 토너먼트', matches: S.matches.filter(m => m.phase === 'lower') },
+    ].filter(s => s.matches.length > 0);
 
+    // 현재 필터가 없거나 유효하지 않으면 첫 번째 섹션 선택
+    if (!groupFilter || !sections.find(s => s.key === groupFilter)) {
+      groupFilter = sections.length > 0 ? sections[0].key : null;
+    }
+
+    // 셀렉트박스
+    const filterSel = h('select', {
+      cls: 'group-filter-select',
+      style: 'width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:12px;background:#fff',
+      onchange: e => { groupFilter = e.target.value; render(); }
+    }, ...sections.map(s => {
+      const o = h('option', { value: s.key }, s.label);
+      if (s.key === groupFilter) o.selected = true;
+      return o;
+    }));
+    content.appendChild(filterSel);
+
+    // 선택된 섹션만 렌더링
+    const active = sections.find(s => s.key === groupFilter);
+    if (active) {
+      const matches = active.matches;
       if (isDandokdan && matches.some(m => m.teamMatchId)) {
-        // 단단복: team-bout 카드로 묶어서 표시
         const byRound = {};
         matches.forEach(m => { (byRound[m.round] = byRound[m.round] || []).push(m); });
         Object.keys(byRound).sort((a, b) => a - b).forEach(round => {
@@ -174,7 +191,7 @@ function renderMatchesTab() {
           const byTM = {};
           list.forEach(m => {
             if (m.teamMatchId) (byTM[m.teamMatchId] = byTM[m.teamMatchId] || []).push(m);
-            else content.appendChild(matchCard(m)); // BYE 등
+            else content.appendChild(matchCard(m));
           });
           Object.keys(byTM).forEach(tmId => {
             const bout = byTM[tmId].sort((a, b) => a.subRound - b.subRound);
@@ -182,7 +199,6 @@ function renderMatchesTab() {
           });
         });
       } else {
-        // 단식/복식: 일반 matchCard
         const byRound = {};
         matches.forEach(m => { (byRound[m.round] = byRound[m.round] || []).push(m); });
         Object.keys(byRound).sort((a, b) => a - b).forEach(r => {
@@ -193,7 +209,7 @@ function renderMatchesTab() {
           list.forEach(m => content.appendChild(matchCard(m)));
         });
       }
-    });
+    }
     return content;
   }
 
@@ -375,7 +391,7 @@ function renderBracketTab() {
     // A조/B조 순위
     if (isDandokdan) {
       // 단단복: 팀 bout 결과로 순위
-      ['A', 'B'].forEach(gid => {
+      getGroupLabels(S.settings.groupCount || 2).forEach(gid => {
         const gTeams = S.teams.filter(t => t.group === gid);
         const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
         const stats = {};
@@ -416,7 +432,7 @@ function renderBracketTab() {
       });
     } else {
       // 단식/복식: 기존 buildStats 기반 순위
-      ['A', 'B'].forEach(gid => {
+      getGroupLabels(S.settings.groupCount || 2).forEach(gid => {
         const gItems = isDoubles
           ? S.teams.filter(t => t.group === gid).map(t => ({ id: t.id, name: t.name, buso: null }))
           : S.players.filter(p => p.group === gid);
@@ -647,7 +663,7 @@ function renderDashboardTab() {
 
     if (isDandokdan) {
       // 단단복 조별리그: 팀 bout 결과로 순위
-      ['A', 'B'].forEach(gid => {
+      getGroupLabels(S.settings.groupCount || 2).forEach(gid => {
         const gTeams = S.teams.filter(t => t.group === gid);
         const gMatches = S.matches.filter(m => m.phase === 'group' && m.groupId === gid);
         const stats = {};
@@ -689,7 +705,7 @@ function renderDashboardTab() {
         ));
       });
     } else {
-      ['A', 'B'].forEach(gid => {
+      getGroupLabels(S.settings.groupCount || 2).forEach(gid => {
         const gItems = isDoubles
           ? S.teams.filter(t => t.group === gid).map(t => ({ id: t.id, name: t.name, buso: null }))
           : S.players.filter(p => p.group === gid);
@@ -870,13 +886,15 @@ function renderInfoTab() {
           return { ...m, winner: null, score1: 0, score2: 0, sets: [], voided: false };
         });
         // 빈 bracket 다시 생성
-        const teamsA = S.teams.filter(t => t.group === 'A');
-        const teamsB = S.teams.filter(t => t.group === 'B');
-        const halfA = Math.ceil(teamsA.length / 2);
-        const halfB = Math.ceil(teamsB.length / 2);
-        const upperCount = halfA + halfB;
-        const lowerCount = (teamsA.length - halfA) + (teamsB.length - halfB);
-        const bracketType = gameType === 'doubles' ? 'doubles' : 'doubles';
+        const resetLabels = getGroupLabels(S.settings.groupCount || 2);
+        let upperCount = 0, lowerCount = 0;
+        resetLabels.forEach(gid => {
+          const gTeams = S.teams.filter(t => t.group === gid);
+          const half = Math.ceil(gTeams.length / 2);
+          upperCount += half;
+          lowerCount += gTeams.length - half;
+        });
+        const bracketType = 'doubles';
         const upper = genEmptyBracket(upperCount, 'upper', bracketType);
         const lower = genEmptyBracket(lowerCount, 'lower', bracketType);
         S.matches.push(...upper, ...lower);
