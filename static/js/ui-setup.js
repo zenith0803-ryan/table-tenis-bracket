@@ -343,9 +343,21 @@ function renderPlayers() {
       teamSection = h('div', { style: 'margin-top:16px' }, h('label', {}, '팀 구성'), ...cards);
     }
 
+    let customCode = '';
+    const codeInp = h('input', {
+      type: 'text', placeholder: '자동 생성 (예: 동호회대회)',
+      style: 'flex:1;font-size:13px',
+    });
+    codeInp.oninput = e => { customCode = e.target.value.trim(); };
+    const codeSection = d('form-group',
+      h('label', { style: 'font-size:13px' }, '대진 코드 (선택)'),
+      codeInp,
+    );
+
     app.appendChild(d('content',
       ...playerInputs,
       teamSection,
+      codeSection,
       h('div', { style: 'height:16px' }),
       d('row',
         h('button', { cls: 'btn btn-secondary', onclick: () => { S.screen = 'setup'; render(); } }, '← 뒤로'),
@@ -415,7 +427,8 @@ function renderPlayers() {
 
             savePlayerHistory(S.players);
             S.screen = 'main'; S.tab = 'matches';
-            const code = await apiCreate();
+            const code = await apiCreate(customCode || undefined);
+            if (!code) return;
             roomCode = code;
             history.replaceState(null, '', `?room=${code}`);
             startPolling();

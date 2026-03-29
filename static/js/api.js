@@ -1,13 +1,17 @@
 // ================================================================
 // API
 // ================================================================
-async function apiCreate() {
+async function apiCreate(customCode) {
+  const body = { state: S };
+  if (customCode) body.code = customCode;
   const res = await fetch('/api/rooms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ state: S }),
+    body: JSON.stringify(body),
   });
-  return (await res.json()).code;
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || '방 생성 실패'); return null; }
+  return data.code;
 }
 
 async function apiGet(code) {

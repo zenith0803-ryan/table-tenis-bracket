@@ -82,7 +82,13 @@ MAX_ROOMS = 10
 def create_room():
     if len(rooms) >= MAX_ROOMS:
         return jsonify({'error': '최대 대진 수(10개)를 초과했습니다. 기존 대진을 삭제해주세요.'}), 400
-    code = generate_code()
+    custom_code = request.json.get('code', '').strip()
+    if custom_code:
+        if custom_code in rooms:
+            return jsonify({'error': '이미 사용 중인 코드입니다.'}), 400
+        code = custom_code
+    else:
+        code = generate_code()
     now = now_iso()
     rooms[code] = {
         'state': request.json.get('state', {}),
