@@ -25,7 +25,10 @@ function shuffle(arr) {
 // ================================================================
 // SCORING & HANDICAP
 // ================================================================
-function winsNeeded() {
+function winsNeeded(match) {
+  if (match && match.phase === 'group' && S.settings.tournamentType === 'group') {
+    return S.settings.groupScoringFormat === 'bo5' ? 3 : 2;
+  }
   return S.settings.scoringFormat === 'bo5' ? 3 : 2;
 }
 

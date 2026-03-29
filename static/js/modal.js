@@ -5,7 +5,7 @@ function renderModal() {
   const match = S.matches.find(m => m.id === S.modalMatchId);
   if (!match) return null;
 
-  const needed = winsNeeded();
+  const needed = winsNeeded(match);
   const hc = calcHandicap(match);
   // 이미 결과가 있으면 해당 승자를 초기 선택 상태로
   let selectedWinner = match.winner || null;

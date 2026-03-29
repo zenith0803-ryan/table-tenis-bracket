@@ -106,10 +106,6 @@ function renderSetupNew(tmp, onBack) {
         { value: 'dandokdan',  label: LABEL.gameType.dandokdan },
         { value: 'jjampong',   label: LABEL.gameType.jjampong },
       ], 'gameType')),
-      d('form-group', h('label', {}, '득점 방식'), optGroup([
-        { value: 'bo3', label: LABEL.format.bo3 },
-        { value: 'bo5', label: LABEL.format.bo5 },
-      ], 'scoringFormat')),
     ];
 
     if (tmp.gameType !== 'jjampong') {
@@ -120,6 +116,24 @@ function renderSetupNew(tmp, onBack) {
       modeOpts.push({ value: 'group', label: LABEL.mode.group });
       fields.push(d('form-group', h('label', {}, '경기 방식'), optGroup(modeOpts, 'tournamentType')));
     }
+
+    // 득점 방식: 조별리그+토너먼트일 때 분리 표시
+    if (tmp.tournamentType === 'group') {
+      fields.push(d('form-group', h('label', {}, '득점 (조별리그)'), optGroup([
+        { value: 'bo3', label: LABEL.format.bo3 },
+        { value: 'bo5', label: LABEL.format.bo5 },
+      ], 'groupScoringFormat')));
+      fields.push(d('form-group', h('label', {}, '득점 (토너먼트)'), optGroup([
+        { value: 'bo3', label: LABEL.format.bo3 },
+        { value: 'bo5', label: LABEL.format.bo5 },
+      ], 'scoringFormat')));
+    } else {
+      fields.push(d('form-group', h('label', {}, '득점 방식'), optGroup([
+        { value: 'bo3', label: LABEL.format.bo3 },
+        { value: 'bo5', label: LABEL.format.bo5 },
+      ], 'scoringFormat')));
+    }
+
     if (tmp.gameType === 'doubles' || tmp.gameType === 'dandokdan') {
       fields.push(d('form-group', h('label', {}, '팀 구성'), optGroup([
         { value: 'auto',   label: LABEL.doublesMode.auto },

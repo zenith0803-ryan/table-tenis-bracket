@@ -12,6 +12,7 @@ let S = {
     groupMode: 'auto',
     groupCount: 2,
     scoringFormat: 'bo3',
+    groupScoringFormat: 'bo3',
     tournamentType: 'roundrobin',
     playerCount: 4,
   },

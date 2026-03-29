@@ -855,7 +855,12 @@ function renderInfoTab() {
   content.appendChild(d('info-box',
     h('h3', {}, '대회 정보'),
     d('info-row', h('span', {}, '종목'),  s('info-val', LABEL.gameType[gameType])),
-    d('info-row', h('span', {}, '득점'),  s('info-val', LABEL.format[scoringFormat])),
+    ...(tournamentType === 'group' ? [
+      d('info-row', h('span', {}, '득점 (조별리그)'), s('info-val', LABEL.format[S.settings.groupScoringFormat || 'bo3'])),
+      d('info-row', h('span', {}, '득점 (토너먼트)'), s('info-val', LABEL.format[scoringFormat])),
+    ] : [
+      d('info-row', h('span', {}, '득점'), s('info-val', LABEL.format[scoringFormat])),
+    ]),
     d('info-row', h('span', {}, '방식'),  s('info-val', modeLabel)),
     d('info-row', h('span', {}, '참가자'), s('info-val', `${S.players.length}명`)),
     d('info-row', h('span', {}, '진행'),  s('info-val', `${done} / ${total} 경기`)),
