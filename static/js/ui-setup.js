@@ -217,9 +217,74 @@ function renderPlayers() {
     const groupLabels = getGroupLabels(S.settings.groupCount || 2);
     const groupOpts = groupLabels.map(g => `${g}조`);
 
+    const history = loadPlayerHistory();
+
     const playerInputs = players.map((p, i) => {
-      const inp = h('input', { type: 'text', value: p.name, placeholder: `선수 ${i + 1}`, style: 'flex:1' });
-      inp.oninput = e => { players[i].name = e.target.value || `선수${i + 1}`; };
+      const wrapper = h('div', { style: 'flex:1;position:relative' });
+      const inp = h('input', { type: 'text', value: p.name, placeholder: `선수 ${i + 1}`, style: 'width:100%' });
+      const dropdown = h('div', { cls: 'ac-dropdown', style: 'display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-top:none;border-radius:0 0 8px 8px;max-height:150px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.1)' });
+      let acIdx = -1;
+
+      const showAc = (query) => {
+        dropdown.innerHTML = '';
+        acIdx = -1;
+        if (!query) { dropdown.style.display = 'none'; return; }
+        const q = query.toLowerCase();
+        const matches = history.filter(h => h.name.toLowerCase().includes(q) && h.name !== query);
+        if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+        matches.slice(0, 8).forEach((m, mi) => {
+          const item = h('div', {
+            style: 'padding:8px 12px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between',
+          }, m.name, m.buso ? h('span', { style: 'color:#aaa;font-size:11px' }, `${m.buso}부`) : '');
+          item.onmousedown = e => {
+            e.preventDefault();
+            players[i].name = m.name;
+            if (m.buso) players[i].buso = m.buso;
+            draw();
+          };
+          item.onmouseenter = () => {
+            acIdx = mi;
+            highlightAc();
+          };
+          dropdown.appendChild(item);
+        });
+        dropdown.style.display = 'block';
+      };
+
+      const highlightAc = () => {
+        [...dropdown.children].forEach((c, ci) => {
+          c.style.background = ci === acIdx ? '#f0f0f0' : '#fff';
+        });
+      };
+
+      inp.oninput = e => {
+        players[i].name = e.target.value || `선수${i + 1}`;
+        showAc(e.target.value);
+      };
+      inp.onkeydown = e => {
+        const items = dropdown.children;
+        if (items.length === 0 || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          acIdx = Math.min(acIdx + 1, items.length - 1);
+          highlightAc();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          acIdx = Math.max(acIdx - 1, 0);
+          highlightAc();
+        } else if (e.key === 'Enter' && acIdx >= 0) {
+          e.preventDefault();
+          items[acIdx].onmousedown(e);
+        } else if (e.key === 'Escape') {
+          dropdown.style.display = 'none';
+        }
+      };
+      inp.onblur = () => { setTimeout(() => { dropdown.style.display = 'none'; }, 150); };
+      inp.onfocus = () => { if (inp.value) showAc(inp.value); };
+
+      wrapper.appendChild(inp);
+      wrapper.appendChild(dropdown);
+
 
       const busoSel = h('select', { style: 'width:72px;padding:11px 6px;border:1px solid #ddd;border-radius:8px;font-size:13px', onchange: e => {
         const v = e.target.value;
@@ -231,7 +296,7 @@ function renderPlayers() {
         return o;
       }));
 
-      const els = [s('player-num', `${i + 1}.`), inp, busoSel];
+      const els = [s('player-num', `${i + 1}.`), wrapper, busoSel];
 
       if (isManualGroup) {
         const groupSel = h('select', { style: 'width:62px;padding:11px 6px;border:1px solid #ddd;border-radius:8px;font-size:13px', onchange: e => {
@@ -348,6 +413,7 @@ function renderPlayers() {
               S.matches = genJjampong(S.players);
             }
 
+            savePlayerHistory(S.players);
             S.screen = 'main'; S.tab = 'matches';
             const code = await apiCreate();
             roomCode = code;

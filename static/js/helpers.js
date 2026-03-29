@@ -23,6 +23,34 @@ function shuffle(arr) {
 }
 
 // ================================================================
+// PLAYER HISTORY (localStorage 자동완성)
+// ================================================================
+const PLAYER_HISTORY_KEY = 'tt_player_history';
+
+function loadPlayerHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(PLAYER_HISTORY_KEY)) || [];
+  } catch { return []; }
+}
+
+function savePlayerHistory(players) {
+  const history = loadPlayerHistory();
+  players.forEach(p => {
+    if (!p.name || /^선수\d+$/.test(p.name)) return;
+    const idx = history.findIndex(h => h.name === p.name);
+    if (idx >= 0) {
+      history[idx].buso = p.buso;
+      history[idx].used = Date.now();
+    } else {
+      history.push({ name: p.name, buso: p.buso, used: Date.now() });
+    }
+  });
+  // 최근 200명만 유지
+  history.sort((a, b) => b.used - a.used);
+  localStorage.setItem(PLAYER_HISTORY_KEY, JSON.stringify(history.slice(0, 200)));
+}
+
+// ================================================================
 // SCORING & HANDICAP
 // ================================================================
 function winsNeeded(match) {
